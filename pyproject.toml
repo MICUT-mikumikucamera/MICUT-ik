@@ -1,0 +1,8 @@
+[project]
+name = "micut-ik"
+version = "0.1.0"
+description = "MiCut placement-to-render integration foundation"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

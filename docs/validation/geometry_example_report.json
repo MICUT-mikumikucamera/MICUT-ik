@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "status": "rendered_with_framing_warning",
+  "projection": {
+    "bbox_px": {
+      "min": [
+        431.93658032003674,
+        5.8118670410382265
+      ],
+      "max": [
+        812.3824470411016,
+        804.5127250674717
+      ]
+    },
+    "fully_in_frame": false,
+    "vertices_behind_camera": 0,
+    "automatic_rescale": false,
+    "note": "image framing only; does not validate collision, floor occupancy or occlusion"
+  },
+  "camera": {
+    "width": 768,
+    "height": 1024,
+    "fx": 682.667,
+    "fy": 682.667,
+    "cx": 384.0,
+    "cy": 512.0,
+    "R": [
+      [
+        0.999971,
+        -0.005382,
+        -0.005322
+      ],
+      [
+        -0.007569,
+        -0.711037,
+        -0.703114
+      ],
+      [
+        0.0,
+        -0.703134,
+        0.711057
+      ]
+    ],
+    "t": [
+      0.0,
+      1.71169,
+      0.0
+    ]
+  },
+  "limitations": [
+    "fixed standing preset, no new contact IK solver",
+    "no scene depth occlusion, collision solving or light estimation",
+    "source metric accuracy is inherited, not validated by rendering"
+  ]
+}

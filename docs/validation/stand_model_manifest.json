@@ -1,0 +1,128 @@
+{
+  "model_id": "legend-pretty-miku-local-v1",
+  "unit": "m",
+  "pose_id": "stand_default",
+  "source_dimensions_blender_units": [
+    0.6327094435691833,
+    0.5093798637390137,
+    1.5493705795379356
+  ],
+  "source_height_above_soles_units": 1.5493705795379356,
+  "target_height_m": 1.58,
+  "target_height_note": "Integration test setting, not a finalized character height or a measured source unit claim.",
+  "applied_uniform_scale": 1.0197689441548574,
+  "source_anchor_blender_units": [
+    -3.259629011154175e-09,
+    -0.11964777112007141,
+    -0.0011131094070151448
+  ],
+  "anchor_type": "feet_center_on_ground",
+  "anchor_position": [
+    0.0,
+    0.0,
+    3.2
+  ],
+  "facing_direction_geometry": [
+    0.0,
+    0.0,
+    -1.0
+  ],
+  "blender_yaw_rad": 0.0,
+  "normalized_local_bounds_m": {
+    "min": [
+      -0.3226087172886083,
+      0.0,
+      -0.41771409468094867
+    ],
+    "max": [
+      0.32260872393674517,
+      1.58,
+      0.10173567113793046
+    ],
+    "size": [
+      0.6452174412253535,
+      1.58,
+      0.5194497658188791
+    ]
+  },
+  "normalized_size_m": {
+    "width": 0.6452174412253535,
+    "height": 1.58,
+    "depth": 0.5194497658188791
+  },
+  "world_bounds_geometry_m": {
+    "min": [
+      -0.32260870933532715,
+      0.0,
+      3.098264455795288
+    ],
+    "max": [
+      0.32260870933532715,
+      1.5800000429153442,
+      3.6177141666412354
+    ],
+    "size": [
+      0.6452174186706543,
+      1.5800000429153442,
+      0.5194497108459473
+    ]
+  },
+  "foot_contact_points_geometry_m": {
+    "left": [
+      0.06712308526039124,
+      6.763730198144913e-08,
+      3.200000047683716
+    ],
+    "right": [
+      -0.06712309271097183,
+      0.0,
+      3.200000047683716
+    ]
+  },
+  "foot_height_difference_m": 6.763730198144913e-08,
+  "foot_anchor_method": "midpoint of weighted left/right near-sole bounds; lower sole is ground",
+  "includes": "all selected evaluated mesh vertices, including hair, costume and hands",
+  "body_collision_proxy": null,
+  "preset_bone_changes": [
+    {
+      "bone": "Arm_L",
+      "armature_space_y_rotation_deg": 75.0
+    },
+    {
+      "bone": "Arm_R",
+      "armature_space_y_rotation_deg": -75.0
+    }
+  ],
+  "blender_root_matrix": [
+    [
+      1.0197689533233643,
+      0.0,
+      0.0,
+      3.324068575949468e-09
+    ],
+    [
+      0.0,
+      1.0197689533233643,
+      0.0,
+      3.3220131397247314
+    ],
+    [
+      0.0,
+      0.0,
+      1.0197689533233643,
+      0.0011351144639775157
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "source_file_sha256": "65eb0da94a83211b85b0a2b05626675d5c9a0e144662167fea97df0dd00e80c4",
+  "source_file_name": "legend_pretty_miku_look.blend",
+  "render_environment": {
+    "engine": "Blender Cycles CPU",
+    "blender": "5.2.0 LTS"
+  }
+}

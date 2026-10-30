@@ -1,0 +1,9 @@
+{
+  "coordinate_frame": "geometry_world",
+  "unit": "m",
+  "anchor_type": "feet_center_on_ground",
+  "anchor_position": [0.0, 0.0, 3.2],
+  "action": "stand",
+  "pose_id": "stand_default",
+  "facing_rule": "look_at_camera"
+}

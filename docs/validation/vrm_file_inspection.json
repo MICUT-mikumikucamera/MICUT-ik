@@ -1,0 +1,31 @@
+{
+  "file_name": "3000533088641481097.vrm",
+  "sha256": "7e704ca15553132ad1bd2a86022c111973206138045c4a5ff5a512459f9fa1cf",
+  "bytes": 17576,
+  "vrm_spec": "0.0",
+  "meshes": [
+    {
+      "name": "Cube",
+      "position_accessor_vertex_count": 24
+    }
+  ],
+  "images": 0,
+  "skins": 1,
+  "humanoid_bone_count": 53,
+  "meta_as_stored": {
+    "allowedUserName": "OnlyAuthor",
+    "author": "undefined",
+    "commercialUssageName": "Disallow",
+    "contactInformation": "undefined",
+    "licenseName": "Redistribution_Prohibited",
+    "otherLicenseUrl": "",
+    "otherPermissionUrl": "",
+    "reference": "undefined",
+    "sexualUssageName": "Disallow",
+    "title": "undefined",
+    "version": "undefined",
+    "violentUssageName": "Disallow"
+  },
+  "placeholder_cube_detected": true,
+  "warning": "Cube geometry is not the supplied character appearance; do not use its bounds as character size."
+}

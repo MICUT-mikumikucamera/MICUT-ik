@@ -1,0 +1,15 @@
+{
+  "model_id": "legend-pretty-miku-local-v1",
+  "target_height_m": 1.58,
+  "target_height_note": "Integration test setting, not a finalized character height or a measured source unit claim.",
+  "source_up_axis": "+Z",
+  "source_forward_axis": "-Y",
+  "armature_name": "Armature",
+  "mesh_names": ["Appearance Miku_BDEF_mod-v04_mesh"],
+  "pose_id": "stand_default",
+  "arm_bones": {"left": "Arm_L", "right": "Arm_R"},
+  "arm_lowering_degrees": 75,
+  "foot_groups": {"left": ["Ankle_L", "AnkleTip_L"], "right": ["Ankle_R", "AnkleTip_R"]},
+  "ankle_bones": {"left": "Ankle_L", "right": "Ankle_R"},
+  "feet_weight_threshold": 0.25
+}

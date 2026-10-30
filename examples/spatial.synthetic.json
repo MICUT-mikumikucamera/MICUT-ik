@@ -1,0 +1,11 @@
+{
+  "note": "SYNTHETIC camera for standalone integration preview. Not a depth-model result.",
+  "image": {"width": 768, "height": 1024},
+  "camera": {"fx": 900.0, "fy": 900.0, "cx": 384.0, "cy": 512.0},
+  "ground_plane": {
+    "cam_to_world": {
+      "R": [[1, 0, 0], [0, -0.984807753012208, -0.17364817766693033], [0, -0.17364817766693033, 0.984807753012208]],
+      "t": [0, 1.2, 0]
+    }
+  }
+}
