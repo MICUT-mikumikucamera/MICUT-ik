@@ -11,11 +11,28 @@
 - 기하 좌표를 Blender 좌표로 변환하고 K/R/t로 카메라 설정
 - 투명 PNG, 모델 크기/기준점 manifest, 화면 잘림 검사 보고서 출력
 
-**현재 렌더 환경은 Blender Cycles CPU입니다.** 제품의 최종 렌더 엔진을 확정한 것은 아닙니다. .blend는 직접 사용하고, VRM은 별도 검사만 합니다. 범용 VRM 로더나 three-vrm/Unity 구현은 포함하지 않았습니다.
+**두 렌더 경로를 지원합니다: Blender Cycles CPU와 VRM 직접 로딩(three.js + three-vrm).** 제품의 최종 렌더 엔진을 확정한 것은 아닙니다. 새로 제공된 `3000533088641481097 (1).vrm`은 실제 캐릭터를 포함한 VRM 1.0이며 브라우저에서 직접 렌더를 검증했습니다. 처음 제공된 17KB VRM(Cube)은 다른 파일입니다.
 
 앉기, 사람 포즈 리타게팅, 새로운 접촉 IK, 환경 충돌 해결, 깊이 기반 가림, 조명 추정은 다음 작업입니다. 기본 서기에서는 기존 리그 위에 팔을 내리는 고정 프리셋만 적용합니다.
 
 ## 빠른 실행
+
+### VRM 직접 렌더 (Blender 불필요)
+
+Node.js 22 이상과 Chrome/Edge 또는 Playwright Chromium이 필요합니다.
+
+```powershell
+npm ci
+node tools/render_vrm.mjs --model 'C:\path\3000533088641481097 (1).vrm' --spatial examples/spatial.synthetic.json --placement examples/placement.preview.json --out outputs/vrm-preview
+```
+
+`--height 1.58`로 테스트 키를 지정할 수 있습니다. 생략 시 1.58m를 사용하며 최종 디자인 키로 확정한 값은 아닙니다. 로컬 Windows Chrome/Edge를 자동 탐색합니다. 다른 브라우저는 `--browser 실행파일경로` 또는 `BROWSER_BIN`으로 지정하고, 설치된 브라우저가 없으면 `npx playwright install chromium` 후 실행합니다. 서버는 로컬 루프백에만 잠시 열고 렌더 후 종료합니다.
+
+입력 placement·spatial 형식과 의미는 Blender 경로와 같습니다. 출력은 `character.png`, `model_manifest.json`, `vrm_render_report.json`입니다. manifest의 공통 필드로 모델 SHA, 배율·크기, 발 접촉점을 전달하고 보고서에서 카메라 투영 오차·화면 잘림을 확인합니다. local bounds는 모델의 앞쪽이 +Z인 기준이며, 월드에 적용할 때 배치 방향과 엔진 축 변환을 반영합니다.
+
+VRM 버전·휴머노이드별 공통 로딩은 three-vrm을 사용하지만, 발 기준점은 Foot/Toes의 스킨 가중치가 있는 모델을 전제합니다. 타 모델의 발 가중치가 다르면 검증이 필요합니다.
+
+### Blender 직접 렌더
 
 필수: Blender 5.2(검증 버전). 순수 계약 테스트는 Python 3.10 이상.
 
@@ -108,3 +125,5 @@ python tools/check_outputs.py outputs/geometry-sample --expected-anchor 0.3 0 0.
 모델 파일과 파생 .blend, 사진·렌더 이미지는 기본 Git 제외입니다. 제공받은 VRM의 메타데이터에는 배포 제한 표기가 있습니다. 모델 원본·파생물의 외부 공유 조건은 별도 확인 후 결정합니다. 이 저장소에는 실행 코드와 수치 검사 자료만 추가합니다.
 
 참고: [Blender Object API](https://docs.blender.org/api/current/bpy.types.Object.html), [Blender Camera API](https://docs.blender.org/api/current/bpy.types.Camera.html)
+
+VRM 로딩 참고: [three-vrm 공식 문서](https://pixiv.github.io/three-vrm/docs/)

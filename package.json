@@ -1,0 +1,18 @@
+{
+  "name": "micut-ik",
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  },
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "MiCut placement adapters for Blender and VRM",
+  "scripts": {
+    "test": "node --test tests/vrm_math.test.mjs",
+    "render:vrm": "node tools/render_vrm.mjs"
+  }
+}

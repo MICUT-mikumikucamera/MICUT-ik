@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>MiCut VRM render test</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/build/three.module.js",
+          "three/addons/": "/vendor/three/examples/jsm/",
+          "@pixiv/three-vrm": "/vendor/@pixiv/three-vrm/lib/three-vrm.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <script type="module" src="/web/vrm.js"></script>
+  </body>
+</html>

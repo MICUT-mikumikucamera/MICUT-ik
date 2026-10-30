@@ -1,0 +1,93 @@
+{
+  "status": "rendered",
+  "model_id": "appearance-miku-vrm1-local-v1",
+  "pose_id": "stand_default",
+  "unit": "m",
+  "environment": {
+    "engine": "three.js WebGL",
+    "three_revision": "186",
+    "vrm_version": "1"
+  },
+  "target_height_m": 1.58,
+  "target_height_note": "Explicit integration setting, not finalized character design height",
+  "source_height_above_soles_units": 1.549370419503368,
+  "applied_uniform_scale": 1.0197690494868554,
+  "source_anchor": [
+    5.523359547510154e-15,
+    -0.001113033902278345,
+    0.1196477579230711
+  ],
+  "source_dimensions": [
+    0.6327094045871003,
+    1.549370419503368,
+    0.5093798396470799
+  ],
+  "normalized_size_m": {
+    "width": 0.6452174681171816,
+    "height": 1.58,
+    "depth": 0.5194497949046696
+  },
+  "normalized_local_bounds_m": {
+    "min": [
+      -0.32260876021510176,
+      0,
+      -0.41771411300844485
+    ],
+    "max": [
+      0.3226087079020798,
+      1.58,
+      0.10173568189622471
+    ]
+  },
+  "local_bounds_axes": "model-local: +X horizontal, +Y up, +Z character front; apply placement yaw before world use",
+  "foot_contact_points_geometry_m": {
+    "left": [
+      0.06712310909402368,
+      5.908901840045999e-16,
+      3.2000000000000006
+    ],
+    "right": [
+      -0.06712310909402368,
+      0,
+      3.1999999999999997
+    ]
+  },
+  "anchor_position": [
+    0,
+    0,
+    3.2
+  ],
+  "anchor_type": "feet_center_on_ground",
+  "foot_height_difference_m": 5.908901840045999e-16,
+  "facing_direction_geometry": [
+    0,
+    0,
+    -1
+  ],
+  "projection": {
+    "bbox_px": {
+      "min": [
+        302.0757382145046,
+        243.9932866181412
+      ],
+      "max": [
+        465.92423747400204,
+        687.8146647039428
+      ]
+    },
+    "fully_in_frame": true,
+    "vertices_behind_camera": 0,
+    "automatic_rescale": false
+  },
+  "camera_projection_error_px": 5.684341886080802e-14,
+  "mesh_count": 13,
+  "vertices": 22530,
+  "limitations": [
+    "fixed stand preset, no new contact IK",
+    "no scene occlusion, collision or light estimation",
+    "appearance bounds include hair and costume"
+  ],
+  "source_file_name": "3000533088641481097 (1).vrm",
+  "source_file_sha256": "d82699d2a913397d9761614c917a6305a6121f8654623c1197dcf3a13381a789",
+  "browser_errors": []
+}

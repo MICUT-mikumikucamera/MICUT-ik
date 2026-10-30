@@ -1,0 +1,35 @@
+{
+  "file_name": "3000533088641481097 (1).vrm",
+  "sha256": "d82699d2a913397d9761614c917a6305a6121f8654623c1197dcf3a13381a789",
+  "bytes": 30918696,
+  "vrm_spec": "1.0",
+  "meshes": [
+    {
+      "name": "Appearance Miku_BDEF_mod-v04",
+      "position_accessor_vertex_count": 22530
+    }
+  ],
+  "images": 6,
+  "skins": 1,
+  "humanoid_bone_count": 51,
+  "meta_as_stored": {
+    "allowAntisocialOrHateUsage": false,
+    "allowExcessivelySexualUsage": false,
+    "allowExcessivelyViolentUsage": false,
+    "allowPoliticalOrReligiousUsage": false,
+    "allowRedistribution": true,
+    "authors": [
+      "undefined"
+    ],
+    "avatarPermission": "everyone",
+    "commercialUsage": "personalNonProfit",
+    "creditNotation": "required",
+    "licenseUrl": "https://vrm.dev/licenses/1.0/",
+    "modification": "allowModification",
+    "name": "Appearance Miku",
+    "thumbnailImage": 5,
+    "version": "undefined"
+  },
+  "placeholder_cube_detected": false,
+  "warning": null
+}

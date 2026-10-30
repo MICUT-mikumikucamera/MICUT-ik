@@ -4,6 +4,7 @@ __pycache__/
 .env
 local/
 outputs/
+node_modules/
 *.blend
 *.blend1
 *.vrm

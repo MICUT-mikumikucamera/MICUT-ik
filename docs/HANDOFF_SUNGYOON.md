@@ -7,6 +7,8 @@
 - 테스트 외형: 제공받은 `legend_pretty_miku_look.blend`
 - 실행 환경: Blender 5.2.0 LTS / Cycles CPU
 - 제공 VRM에는 미쿠 외형 대신 Cube 메시가 있어 이번 렌더에 사용하지 않음
+- 위 내용은 처음 전달된 17KB 파일에 해당. 새로 전달된 `3000533088641481097 (1).vrm`은 정상 미쿠 VRM 1.0이며 three.js + three-vrm으로 직접 렌더 검증 완료
+- 새 VRM 경로도 동일한 placement·spatial 형식, 발바닥 기준과 수평 방향을 적용. VRM 모델 ID는 `appearance-miku-vrm1-local-v1`, Blender와 구분
 - 원본 모델 파일은 별도 전달. 저장소에는 원본을 넣지 않음
 
 ## 2. 크기·배율
@@ -52,3 +54,5 @@
 ## 6. 함께 주고받을 자료
 
 렌더 쪽에서 `model_manifest.json`을 먼저 공유하고 배치 파트가 동일한 모델·배율·포즈를 사용. 배치 쪽에서는 placement JSON과 그 사진의 spatial_info.json 전달. 화면 잘림은 보고서로 반환하며 임의 축소·위치 변경은 하지 않음.
+
+VRM 경로도 `model_manifest.json`을 출력. `normalized_size_m`, `normalized_local_bounds_m`, `foot_contact_points_geometry_m`, `anchor_position`, `facing_direction_geometry`를 같은 의미로 확인 가능. local bounds는 모델의 앞쪽이 +Z인 기준이므로 배치 방향을 적용한 후 기하 월드 경계로 사용. `vrm_render_report.json`에서 화면 잘림·카메라 검증 확인.
