@@ -122,7 +122,9 @@ python tools/check_outputs.py outputs/geometry-sample --expected-anchor 0.3 0 0.
 
 ## 인수인계
 
-- [민재님 인수인계](docs/HANDOFF_MINJAE.md)
+- [작업 규칙 (AGENTS.md)](AGENTS.md): 환경, 명령, 지켜야 할 것
+- [포즈·IK 사용법](docs/POSE_IK.md)
+- [민재님 인수인계 (10/30 원문)](docs/HANDOFF_MINJAE.md)
 - [성윤님 전달용 모델·좌표 기준](docs/HANDOFF_SUNGYOON.md)
 - [검증 결과와 모델 파일 문제](docs/VALIDATION.md)
 
