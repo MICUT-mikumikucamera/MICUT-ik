@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import unittest
 
-from micut_ik.contracts import (Placement, ContractError, camera_contract,
+from micut_ik.contracts import (Placement, ContractError, camera_contract, pose_registry, to_local,
     geometry_to_blender, blender_to_geometry, project_world, horizontal_facing)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +27,38 @@ class ContractTests(unittest.TestCase):
         for value in [[0, float('nan'), 1], [0, .4, 1], [True, 0, 1], [0, 1]]:
             with self.subTest(value=value), self.assertRaises(ContractError):
                 Placement.parse({**self.request, 'anchor_position': value})
+
+    def test_sit_request_from_seating_prep_contract(self):
+        sit = json.loads((ROOT/'examples/placement.sit.preview.json').read_text())
+        placement = Placement.parse(sit)
+        self.assertEqual((placement.action, placement.pose_id, placement.anchor_type),
+                         ('sit', 'sit_default', 'pelvis_seat_contact'))
+        self.assertEqual(placement.anchor_position[1], .45)
+        self.assertEqual(placement.support_candidate_id, 2)
+
+    def test_sit_rejects_out_of_range_seat_and_mixed_fields(self):
+        sit = json.loads((ROOT/'examples/placement.sit.preview.json').read_text())
+        for y in (0, .2, .9):
+            with self.subTest(y=y), self.assertRaises(ContractError) as ctx:
+                Placement.parse({**sit, 'anchor_position': [0, y, 3]})
+            self.assertEqual(ctx.exception.code, 'SUPPORT_OUT_OF_RANGE')
+        for key, value in [('anchor_type', 'feet_center_on_ground'), ('action', 'stand'),
+                           ('support_candidate_id', -1), ('support_candidate_id', True)]:
+            with self.subTest(key=key), self.assertRaises(ContractError):
+                Placement.parse({**sit, key: value})
+
+    def test_every_registered_pose_declares_contract_fields(self):
+        poses = pose_registry()
+        self.assertTrue({'stand_default', 'stand_natural', 'sit_default'} <= set(poses))
+        for pose in poses.values():
+            self.assertIn(pose['anchor_type'], ('feet_center_on_ground', 'pelvis_seat_contact'))
+            self.assertIn(pose['action'], ('stand', 'sit'))
+
+    def test_local_frame_matches_placement_repo(self):
+        # x = character right r=[f_z,0,-f_x]; facing the camera (-Z) puts character right on world -X.
+        for point, expected in [((.5, 1, 3), (-.5, 1, 0)), ((0, 0, 2.8), (0, 0, .2))]:
+            for got, want in zip(to_local(point, (0, 0, 3), (0, 0, -1)), expected):
+                self.assertAlmostEqual(got, want)
 
     def test_horizontal_camera_facing_ignores_height(self):
         a = horizontal_facing(Placement.parse(self.request), (0, 1.7, 0))

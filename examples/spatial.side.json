@@ -1,0 +1,6 @@
+{
+  "note": "SYNTHETIC side camera for pose inspection only. Looks along +X from 0.75 m height.",
+  "image": {"width": 768, "height": 1024},
+  "camera": {"fx": 1500.0, "fy": 1500.0, "cx": 384.0, "cy": 512.0},
+  "ground_plane": {"cam_to_world": {"R": [[0, 0, 1], [0, -1, 0], [-1, 0, 0]], "t": [0, 0.75, 0]}}
+}

@@ -7,7 +7,9 @@ param(
     [string]$Blender = $env:BLENDER_BIN,
     [int]$Samples = 16,
     [switch]$InspectOnly,
-    [switch]$SaveScene
+    [switch]$SaveScene,
+    [switch]$ExportShape,
+    [switch]$DebugSupports
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -27,5 +29,7 @@ $arguments = @('--background', (Resolve-Path -LiteralPath $Model).Path, '--disab
     '--out', [IO.Path]::GetFullPath($Out), '--samples', [string]$Samples)
 if ($InspectOnly) { $arguments += '--inspect-only' }
 if ($SaveScene) { $arguments += '--save-scene' }
+if ($ExportShape) { $arguments += '--export-shape' }
+if ($DebugSupports) { $arguments += '--debug-supports' }
 & $Blender @arguments
 if ($LASTEXITCODE -ne 0) { throw "Render failed: exit $LASTEXITCODE. See error.json in $Out" }

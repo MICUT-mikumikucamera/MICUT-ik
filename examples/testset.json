@@ -1,0 +1,14 @@
+{
+  "note": "Fixed pose/IK regression set. Paths are relative to the repo root; model and sample1 live in local/ (Git-ignored). Placements here are test points, not approved placement decisions.",
+  "model": "local/models/legend_pretty_miku_refuv.blend",
+  "cases": [
+    {"name": "stand_default_preview", "spatial": "examples/spatial.synthetic.json", "placement": "examples/placement.preview.json", "debug_supports": true},
+    {"name": "stand_natural_preview", "spatial": "examples/spatial.synthetic.json", "placement": "examples/placement.natural.preview.json", "debug_supports": true},
+    {"name": "stand_natural_close", "spatial": "examples/spatial.close.json", "placement": "examples/placement.natural.close.json", "debug_supports": true},
+    {"name": "sit_default_preview", "spatial": "examples/spatial.synthetic.json", "placement": "examples/placement.sit.preview.json", "debug_supports": true},
+    {"name": "sit_default_side", "spatial": "examples/spatial.side.json", "placement": "examples/placement.sit.side.json", "debug_supports": true},
+    {"name": "sample1_stand_front", "spatial": "local/geometry/sample1/spatial_info.json", "placement": "examples/placement.sample1.stand.json", "compose_input": "local/geometry/sample1"},
+    {"name": "sample1_stand_behind_table", "spatial": "local/geometry/sample1/spatial_info.json", "placement": "examples/placement.sample1.behind_table.json", "compose_input": "local/geometry/sample1"},
+    {"name": "sample1_sit_seat2", "spatial": "local/geometry/sample1/spatial_info.json", "placement": "examples/placement.sample1.sit.json", "compose_input": "local/geometry/sample1"}
+  ]
+}

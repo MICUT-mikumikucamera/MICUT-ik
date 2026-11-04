@@ -1,0 +1,22 @@
+{
+  "schema": "micut.pose/0.1",
+  "pose_id": "sit_default",
+  "action": "sit",
+  "anchor_type": "pelvis_seat_contact",
+  "support_height_m": [0.30, 0.60],
+  "description": "Seated on a flat seat: pelvis contact on the seat, thighs forward, shins/feet solved to the floor by IK, hands resting on the thighs by arm IK, head and eyes toward the camera.",
+  "steps": [
+    {"op": "aim", "bone": "left_upper_leg", "dir": [-0.05, 0.0, 1.0]},
+    {"op": "aim", "bone": "right_upper_leg", "dir": [0.05, 0.0, 1.0]},
+    {"op": "rotate", "bone": "spine", "axis": "right", "deg": 3},
+    {"op": "aim", "bone": "left_upper_arm", "dir": [-0.1, -1.0, 0.3]},
+    {"op": "aim", "bone": "right_upper_arm", "dir": [0.1, -1.0, 0.3]}
+  ],
+  "legs": {"mode": "seated", "max_thigh_drop_deg": 15},
+  "skirt": {"mode": "follow_thighs", "front_touch_t": 0.3, "cloth_gap": 0.015, "front_tip_drop": 0.25, "side_dirs": [[0.45, -1.0, 0.25], [0.3, -1.0, 0.2]]},
+  "arms": {"mode": "hands_on_thighs", "thigh_t": 0.55, "inward": 0.015, "wrist_back": 0.05, "lift": 0.025},
+  "finger_curl_deg": 15,
+  "look_at": "camera",
+  "look_limits": {"head_deg": 30, "neck_share": 0.4, "eye_deg": 12},
+  "expressions": {"smile": 0.5}
+}

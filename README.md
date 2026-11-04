@@ -116,6 +116,10 @@ python tools/check_outputs.py outputs/stand-preview --expected-anchor 0 0 3.2 --
 python tools/check_outputs.py outputs/geometry-sample --expected-anchor 0.3 0 0.8
 ```
 
+## 포즈·IK
+
+등록 포즈는 `stand_default`, `stand_natural`, `sit_default`(착석, `pelvis_seat_contact`). 포즈 정의·착석 입력·manifest 추가 항목·테스트 세트 실행은 [포즈·IK 준비](docs/POSE_IK.md) 참고. VRM 경로(`web/`)는 아직 `stand_default`만 받는다.
+
 ## 인수인계
 
 - [민재님 인수인계](docs/HANDOFF_MINJAE.md)

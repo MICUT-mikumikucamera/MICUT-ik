@@ -1,0 +1,24 @@
+{
+  "schema": "micut.pose/0.1",
+  "pose_id": "stand_natural",
+  "action": "stand",
+  "anchor_type": "feet_center_on_ground",
+  "description": "Relaxed stand: weight on the right leg, arms hanging with a soft elbow, feet kept planted by leg IK, head and eyes toward the camera.",
+  "steps": [
+    {"op": "translate", "bone": "root", "offset": [0.015, -0.025, 0.0]},
+    {"op": "rotate", "bone": "hips", "axis": "forward", "deg": -3},
+    {"op": "rotate", "bone": "chest", "axis": "forward", "deg": 2.5},
+    {"op": "aim", "bone": "left_upper_arm", "dir": [-0.17, -1.0, 0.04]},
+    {"op": "aim", "bone": "right_upper_arm", "dir": [0.17, -1.0, 0.04]},
+    {"op": "aim", "bone": "left_lower_arm", "dir": [-0.07, -1.0, 0.22]},
+    {"op": "aim", "bone": "right_lower_arm", "dir": [0.07, -1.0, 0.22]},
+    {"op": "aim", "bone": "left_hand", "dir": [-0.02, -1.0, 0.12]},
+    {"op": "aim", "bone": "right_hand", "dir": [0.02, -1.0, 0.12]},
+    {"op": "rotate", "bone": "head", "axis": "forward", "deg": 4}
+  ],
+  "legs": {"mode": "plant_feet"},
+  "finger_curl_deg": 20,
+  "look_at": "camera",
+  "look_limits": {"head_deg": 30, "neck_share": 0.4, "eye_deg": 12},
+  "expressions": {"smile": 0.5}
+}

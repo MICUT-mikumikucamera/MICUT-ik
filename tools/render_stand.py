@@ -1,4 +1,7 @@
-"""Entry point: blender --background MODEL.blend --python tools/render_stand.py -- ..."""
+"""Entry point: blender --background MODEL.blend --python tools/render_stand.py -- ...
+
+Handles every registered pose (poses/*.json), not only standing; the file name is kept for existing callers.
+"""
 import argparse
 import json
 from pathlib import Path
@@ -7,7 +10,7 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from micut_ik.contracts import Placement, camera_contract
+from micut_ik.contracts import Placement, camera_contract, pose_registry
 from micut_ik.blender_adapter import run
 
 
@@ -20,13 +23,17 @@ def main():
     parser.add_argument('--samples', type=int, default=16)
     parser.add_argument('--inspect-only', action='store_true')
     parser.add_argument('--save-scene', action='store_true', help='save a NEW placed_scene.blend in output, never the input')
+    parser.add_argument('--export-shape', action='store_true', help='write shape.npz (placement-repo layout) for depth compositing')
+    parser.add_argument('--debug-supports', action='store_true', help='render a grey floor/seat for preview; not for compositing')
     args = parser.parse_args(sys.argv[sys.argv.index('--')+1:])
     load = lambda file: json.loads(Path(file).read_text(encoding='utf-8-sig'))
     try:
         if args.samples < 1:
             raise ValueError('samples must be positive')
-        report = run(load(args.profile), Placement.parse(load(args.placement)),
-                     camera_contract(load(args.spatial)), args.out, args.samples, not args.inspect_only)
+        poses = pose_registry()
+        placement = Placement.parse(load(args.placement), poses)
+        report = run(load(args.profile), placement, camera_contract(load(args.spatial)), args.out, args.samples,
+                     not args.inspect_only, poses[placement.pose_id], args.export_shape, args.debug_supports)
         if args.save_scene:
             import bpy
             target = (Path(args.out)/'placed_scene.blend').resolve()
@@ -37,9 +44,10 @@ def main():
     except Exception as error:
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
-        (out/'error.json').write_text(json.dumps({'status': 'failed', 'error_type': type(error).__name__,
+        code = getattr(error, 'code', 'RENDER_FAILED')
+        (out/'error.json').write_text(json.dumps({'status': 'failed', 'code': code, 'error_type': type(error).__name__,
                                                 'message': str(error)}, ensure_ascii=False, indent=2), encoding='utf-8')
-        (out/'placement_report.json').write_text(json.dumps({'status': 'failed', 'error': str(error)},
+        (out/'placement_report.json').write_text(json.dumps({'status': 'failed', 'code': code, 'error': str(error)},
                                                           ensure_ascii=False, indent=2), encoding='utf-8')
         traceback.print_exc()
         # Use --python-exit-code 1 so Blender propagates Python failures to the shell.

@@ -1,0 +1,11 @@
+{
+  "coordinate_frame": "geometry_world",
+  "unit": "m",
+  "anchor_type": "pelvis_seat_contact",
+  "anchor_position": [0.874, 0.445, 1.481],
+  "action": "sit",
+  "pose_id": "sit_default",
+  "facing_rule": "world_direction",
+  "facing_direction": [0.0, 0.0, -1.0],
+  "support_candidate_id": 2
+}
