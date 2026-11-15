@@ -211,6 +211,155 @@ def lighting(anchor):
         obj.rotation_euler = (base+Vector((0,0,.8))-obj.location).to_track_quat('-Z', 'Y').to_euler()
 
 
+def _srgb_to_linear(x):
+    import numpy as np
+    return np.where(x <= .04045, x/12.92, ((x+.055)/1.055)**2.4)
+
+
+def _box_blur(a, r, axis, wrap=False):
+    import numpy as np
+    if r < 1:
+        return a
+    n = 2*r+1
+    pad = [(0, 0)]*a.ndim
+    pad[axis] = (r, r)
+    padded = np.pad(a, pad, mode='wrap' if wrap else 'edge')
+    c = np.cumsum(padded, axis=axis)
+    c = np.concatenate([np.zeros_like(np.take(c, [0], axis=axis)), c], axis=axis)
+    return (np.take(c, range(n, c.shape[axis]), axis=axis)-np.take(c, range(0, c.shape[axis]-n), axis=axis))/n
+
+
+def load_photo_linear(path):
+    """Photo as (H, W, 3) linear float, row 0 = top. Uses Blender's loader (no PIL inside Blender)."""
+    import numpy as np
+    img = bpy.data.images.load(str(path), check_existing=False)
+    img.colorspace_settings.name = 'Non-Color'  # read the stored sRGB code values unchanged
+    w, h = img.size
+    px = np.empty(w*h*4, np.float32)
+    img.pixels.foreach_get(px)
+    bpy.data.images.remove(img)
+    return _srgb_to_linear(px.reshape(h, w, 4)[::-1, :, :3].astype(np.float64))
+
+
+def photo_lighting(camera, photo_path, exposure=2., ceiling_gain=1.3, env_size=(256, 128)):
+    """World lighting estimated from the photo itself, with no light probe.
+
+    Directions the camera saw take the blurred photo colour (parallax ignored). Unseen directions
+    take the photo's top-band mean (ceiling, times ceiling_gain), bottom-band mean (floor) or the
+    global mean. Exposure compensates for the scene albedo baked into photo pixels (~0.5).
+    """
+    import numpy as np
+    photo = load_photo_linear(photo_path)
+    h, w = photo.shape[:2]
+    f = max(1, w//64)
+    small = photo[:h//f*f, :w//f*f].reshape(h//f, f, w//f, f, 3).mean((1, 3))
+    for axis in (0, 1):
+        small = _box_blur(small, 2, axis)
+    sh, sw = small.shape[:2]
+    band = max(1, sh//6)
+    top, bottom, mean = small[:band].reshape(-1, 3).mean(0), small[-band:].reshape(-1, 3).mean(0), small.reshape(-1, 3).mean(0)
+    W, H = env_size
+    az = ((np.arange(W)+.5)/W-.5)*2*math.pi
+    el = ((np.arange(H)+.5)/H-.5)*math.pi
+    az, el = np.meshgrid(az, el)  # row 0 = bottom (Blender image rows), el from -90 to 90
+    d_bl = np.stack([np.cos(el)*np.cos(az), np.cos(el)*np.sin(az), np.sin(el)], -1)
+    d_geo = d_bl[..., [0, 2, 1]]
+    R = np.array(camera['R'])
+    d_cam = d_geo @ R  # = R.T @ d for each row vector
+    env = np.where((el > math.radians(25))[..., None], top*ceiling_gain,
+                   np.where((el < math.radians(-15))[..., None], bottom, mean))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        u = camera['fx']*d_cam[..., 0]/d_cam[..., 2]+camera['cx']
+        v = camera['fy']*d_cam[..., 1]/d_cam[..., 2]+camera['cy']
+    seen = (d_cam[..., 2] > 0) & (u >= 0) & (u < camera['width']) & (v >= 0) & (v < camera['height'])
+    ui = np.clip((u/camera['width']*sw).astype(int), 0, sw-1)
+    vi = np.clip((v/camera['height']*sh).astype(int), 0, sh-1)
+    env = np.where(seen[..., None], small[vi, ui], env)
+    for _ in range(3):
+        env = _box_blur(env, 6, 1, wrap=True)
+        env = _box_blur(env, 4, 0)
+    env = env*exposure
+    image = bpy.data.images.new('MiCut_Photo_Environment', W, H, float_buffer=True, alpha=False)
+    try:
+        image.colorspace_settings.name = 'Linear Rec.709'
+    except TypeError:
+        image.colorspace_settings.name = 'Non-Color'
+    image.pixels.foreach_set(np.concatenate([env, np.ones((H, W, 1))], -1).astype(np.float32).ravel())
+    image.pack()
+
+    scene = bpy.context.scene
+    world = bpy.data.worlds.new('MiCut_Photo_World')
+    world.use_nodes = True
+    nt = world.node_tree
+    bg = nt.nodes['Background']
+    coord, norm = nt.nodes.new('ShaderNodeTexCoord'), nt.nodes.new('ShaderNodeVectorMath')
+    norm.operation = 'NORMALIZE'
+    sep = nt.nodes.new('ShaderNodeSeparateXYZ')
+    nt.links.new(coord.outputs['Generated'], norm.inputs[0])
+    nt.links.new(norm.outputs['Vector'], sep.inputs[0])
+
+    def math_node(op, a, b=None, value=None):
+        n = nt.nodes.new('ShaderNodeMath')
+        n.operation = op
+        nt.links.new(a, n.inputs[0])
+        if b is not None:
+            nt.links.new(b, n.inputs[1])
+        elif value is not None:
+            n.inputs[1].default_value = value
+        return n.outputs[0]
+    # Our own equirect convention, matching the image built above: u = az/2pi + 0.5, v = el/pi + 0.5.
+    uu = math_node('ADD', math_node('DIVIDE', math_node('ARCTAN2', sep.outputs['Y'], sep.outputs['X']), value=2*math.pi), value=.5)
+    vv = math_node('ADD', math_node('DIVIDE', math_node('ARCSINE', sep.outputs['Z']), value=math.pi), value=.5)
+    comb = nt.nodes.new('ShaderNodeCombineXYZ')
+    nt.links.new(uu, comb.inputs['X'])
+    nt.links.new(vv, comb.inputs['Y'])
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image, tex.extension, tex.interpolation = image, 'EXTEND', 'Linear'
+    nt.links.new(comb.outputs['Vector'], tex.inputs['Vector'])
+    nt.links.new(tex.outputs['Color'], bg.inputs['Color'])
+    bg.inputs['Strength'].default_value = 1.
+    scene.world = world
+    return {'method': 'photo environment (seen directions = blurred photo, unseen = band means)',
+            'exposure': exposure, 'ceiling_gain': ceiling_gain,
+            'mean_linear_rgb': [round(float(x), 4) for x in mean],
+            'top_linear_rgb': [round(float(x), 4) for x in top], 'bottom_linear_rgb': [round(float(x), 4) for x in bottom],
+            'seen_fraction_of_sphere': round(float(seen.mean()), 3)}, bottom
+
+
+def shadow_catchers(anchor, direction, seated, floor_rgb, seat_half=.25, floor_half=1.5):
+    """Invisible planes that only receive Miku's shadow: the floor, plus the seat top when sitting."""
+    mat = bpy.data.materials.new('MiCut_Catcher')
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes.get('Principled BSDF')
+    if bsdf:
+        bsdf.inputs['Base Color'].default_value = (*[float(min(1., c*2)) for c in floor_rgb], 1)  # albedo ~ pixel/0.5
+        bsdf.inputs['Roughness'].default_value = 1.
+    made = []
+    base = Vector(geometry_to_blender((anchor[0], 0, anchor[2])))
+    # Kept small: every floor pixel the plane covers is path traced. Shadow 1.5 m away is ~1% and is faded out.
+    bpy.ops.mesh.primitive_plane_add(size=floor_half*2, location=base)
+    made.append(bpy.context.object)
+    if seated:
+        f = Vector(geometry_to_blender(direction))
+        bpy.ops.mesh.primitive_plane_add(size=seat_half*2, location=Vector(geometry_to_blender(anchor))+Vector((0, 0, .001)))
+        seat = bpy.context.object
+        seat.rotation_euler = (0, 0, math.atan2(f.y, f.x))
+        made.append(seat)
+    for obj in made:
+        obj.data.materials.append(mat)
+        obj.is_shadow_catcher = True
+        obj.name = 'MiCut_Shadow_Catcher'
+    return [o.name for o in made]
+
+
+def scaled_camera(camera, scale):
+    """Same lens at a higher pixel count. Continuous pixel coordinates scale linearly (origin at the corner)."""
+    w, h = round(camera['width']*scale), round(camera['height']*scale)
+    sx, sy = w/camera['width'], h/camera['height']
+    return {**camera, 'width': w, 'height': h, 'fx': camera['fx']*sx, 'fy': camera['fy']*sy,
+            'cx': camera['cx']*sx, 'cy': camera['cy']*sy}
+
+
 def debug_supports(anchor, direction, seated):
     """Preview-only floor plane and seat block. Never use these renders for photo compositing."""
     mat = bpy.data.materials.new('MiCut_Debug_Support')
@@ -250,16 +399,49 @@ def projection_report(points, camera):
             'note': 'image framing only; does not validate collision, floor occupancy or occlusion'}
 
 
-def render(output_dir, samples=16):
+def _set_format(settings, fmt):
+    if fmt == 'EXR':
+        if hasattr(settings, 'media_type'):  # Blender 5.x: pick the media type first
+            settings.media_type = 'MULTI_LAYER_IMAGE'
+        settings.file_format = 'OPEN_EXR_MULTILAYER'
+        settings.color_depth = '32'
+        settings.exr_codec = 'ZIP'
+    else:
+        if hasattr(settings, 'media_type'):
+            settings.media_type = 'IMAGE'
+        settings.file_format = 'PNG'
+        settings.color_mode = 'RGBA'
+        settings.color_depth = '8'
+
+
+def render(output_dir, samples=16, passes=False):
+    """character.png always; with passes=True also passes.exr (linear Combined, Depth, Shadow Catcher)."""
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
     scene.cycles.samples = samples
     scene.cycles.use_denoising = True
     scene.render.film_transparent = True
-    scene.render.image_settings.file_format = 'PNG'
-    scene.render.image_settings.color_mode = 'RGBA'
     scene.render.use_compositing = False
+    # Diffuse character in a soft environment: deep bounces add time, not visible light.
+    c = scene.cycles
+    c.max_bounces, c.diffuse_bounces, c.glossy_bounces, c.transmission_bounces = 4, 2, 2, 2
+    c.volume_bounces, c.transparent_max_bounces = 0, 8
+    if passes:
+        # Plain sRGB display transform so the PNG and the linear EXR agree with the photo's encoding.
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+        scene.view_settings.exposure, scene.view_settings.gamma = 0., 1.
+        layer = bpy.context.view_layer
+        layer.use_pass_z = True
+        layer.cycles.use_pass_shadow_catcher = True
+        _set_format(scene.render.image_settings, 'EXR')
+        scene.render.filepath = str(Path(output_dir)/'passes.exr')
+        bpy.ops.render.render(write_still=True)
+        _set_format(scene.render.image_settings, 'PNG')
+        bpy.data.images['Render Result'].save_render(filepath=str(Path(output_dir)/'character.png'), scene=scene)
+        return
+    _set_format(scene.render.image_settings, 'PNG')
     scene.render.filepath = str(Path(output_dir)/'character.png')
     bpy.ops.render.render(write_still=True)
 
@@ -285,13 +467,20 @@ def export_shape(path, profile, meshes, world_points, anchor, direction):
 
 
 def run(profile, placement, camera, output_dir, samples=16, render_enabled=True, pose=None,
-        shape=False, debug=False):
+        shape=False, debug=False, photo=None, render_scale=1., exposure=2.):
     out = Path(output_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
     manifest, points, pose_seconds, info = prepare_model(profile, placement, camera, pose)
-    make_camera(camera)
-    lighting(placement.anchor_position)
+    render_camera = scaled_camera(camera, render_scale)
+    make_camera(render_camera)
+    light_report, catchers = {'method': 'fixed studio lights'}, []
+    if photo:
+        light_report, floor_rgb = photo_lighting(camera, photo, exposure)
+        catchers = shadow_catchers(placement.anchor_position, info['direction'], info['seated'], floor_rgb,
+                                   profile.get('seat_half_extent_m', .25))
+    else:
+        lighting(placement.anchor_position)
     if debug:
         debug_supports(placement.anchor_position, info['direction'], info['seated'])
     source = Path(bpy.data.filepath)
@@ -302,11 +491,14 @@ def run(profile, placement, camera, output_dir, samples=16, render_enabled=True,
         meshes = [bpy.data.objects[n] for n in profile['mesh_names']]
         manifest['shape_export'] = export_shape(out/'shape.npz', profile, meshes, points,
                                                 placement.anchor_position, info['direction'])
-    report = {'schema_version': '0.2', 'status': 'rendered' if render_enabled else 'inspected',
+    report = {'schema_version': '0.3', 'status': 'rendered' if render_enabled else 'inspected',
               'pose_id': placement.pose_id, 'projection': projection_report(points, camera),
-              'camera': camera, 'debug_supports_rendered': bool(debug),
+              'camera': camera, 'render_camera': render_camera, 'render_scale': render_scale,
+              'lighting': light_report, 'shadow_catchers': catchers, 'floor_catcher_half_m': 1.5 if catchers else None,
+              'outputs': ['character.png']+(['passes.exr'] if photo else []),
+              'debug_supports_rendered': bool(debug),
               'limitations': ['pose presets + analytic two-bone IK; no physics for hair or skirt (bone-level settling only)',
-                              'no scene lighting estimation or shadows yet',
+                              'lighting estimated from the photo only (no light probe); directional key light not estimated',
                               'source metric accuracy is inherited, not validated by rendering']}
     if not info['seated'] and manifest['foot_height_difference_m'] > .003:
         report['foot_warning'] = 'both soles are not coplanar; no corrective foot IK applied'
@@ -318,7 +510,7 @@ def run(profile, placement, camera, output_dir, samples=16, render_enabled=True,
     render_seconds = 0.
     if render_enabled:
         t = time.perf_counter()
-        render(out, samples)
+        render(out, samples, passes=bool(photo))
         render_seconds = time.perf_counter()-t
     report['timing_s'] = {'pose_and_measure': round(pose_seconds, 3), 'render': round(render_seconds, 3),
                           'total_in_blender': round(time.perf_counter()-started, 3)}

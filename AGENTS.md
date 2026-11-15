@@ -7,7 +7,7 @@
 
 - Blender 5.2 LTS (`$env:BLENDER_BIN = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'`)
 - Python 3.10+ (계약·IK 단위 테스트는 표준 라이브러리만 사용)
-- 테스트 세트·깊이 합성 도구는 numpy, pillow 필요: `uv run --no-project --with numpy --with pillow python ...`
+- 테스트 세트·합성 도구는 numpy, pillow, OpenEXR 필요: `uv run --no-project --with numpy --with pillow --with OpenEXR python ...`
 - 깊이 합성은 배치 저장소 `MICUT--placement-decision`을 옆 폴더에 클론해 `--placement-repo`로 넘긴다
 - VRM 경로(`web/`, `tools/render_vrm.mjs`)는 Node 22+ (`npm ci`). 아직 `stand_default`만 받는다
 
@@ -32,8 +32,10 @@
 ```powershell
 python -m unittest discover -s tests -v      # 계약·IK 단위 테스트
 npm test                                      # VRM 경로 JS 테스트
-uv run --no-project --with numpy --with pillow python tools/run_testset.py `
-  --placement-repo ..\MICUT-placement-decision --out outputs/testset   # 전체 렌더 + 합성 + 비교 시트
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/run_testset.py `
+  --placement-repo ..\MICUT-placement-decision --out outputs/testset   # 전체 렌더 + 최종 합성 + 비교 시트
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/finalize.py `
+  --render-dir outputs\x --geometry-dir local\geometry\sample1 --out outputs\results\x\1   # final.jpg + result.json
 .\scripts\render.ps1 -Model local\models\<model>.blend -Spatial <spatial.json> -Placement <placement.json> -Out outputs\x -ExportShape
 .\scripts\export_pose.ps1 -PosedBlend local\pose_work\<copy>.blend -PoseId <id> -Base poses\stand_natural.json
 ```

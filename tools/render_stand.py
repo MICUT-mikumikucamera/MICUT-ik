@@ -25,15 +25,21 @@ def main():
     parser.add_argument('--save-scene', action='store_true', help='save a NEW placed_scene.blend in output, never the input')
     parser.add_argument('--export-shape', action='store_true', help='write shape.npz (placement-repo layout) for depth compositing')
     parser.add_argument('--debug-supports', action='store_true', help='render a grey floor/seat for preview; not for compositing')
+    parser.add_argument('--photo', help='background photo: enables photo lighting, shadow catchers and passes.exr')
+    parser.add_argument('--render-scale', type=float, default=1., help='render at this multiple of the spatial_info resolution')
+    parser.add_argument('--exposure', type=float, default=2., help='photo lighting exposure (compensates scene albedo)')
     args = parser.parse_args(sys.argv[sys.argv.index('--')+1:])
     load = lambda file: json.loads(Path(file).read_text(encoding='utf-8-sig'))
     try:
         if args.samples < 1:
             raise ValueError('samples must be positive')
+        if not 1 <= args.render_scale <= 8:
+            raise ValueError('render-scale must be between 1 and 8')
         poses = pose_registry()
         placement = Placement.parse(load(args.placement), poses)
         report = run(load(args.profile), placement, camera_contract(load(args.spatial)), args.out, args.samples,
-                     not args.inspect_only, poses[placement.pose_id], args.export_shape, args.debug_supports)
+                     not args.inspect_only, poses[placement.pose_id], args.export_shape, args.debug_supports,
+                     str(Path(args.photo).resolve()) if args.photo else None, args.render_scale, args.exposure)
         if args.save_scene:
             import bpy
             target = (Path(args.out)/'placed_scene.blend').resolve()

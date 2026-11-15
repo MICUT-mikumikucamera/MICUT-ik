@@ -1,6 +1,6 @@
 """Render every case in a test set, depth-composite the photo cases, and build one comparison sheet.
 
-  uv run --no-project --with numpy --with pillow python tools/run_testset.py \
+  uv run --no-project --with numpy --with pillow --with OpenEXR python tools/run_testset.py \
       --testset examples/testset.json --placement-repo ../MICUT-placement-decision --out outputs/testset
 
 Blender comes from --blender or BLENDER_BIN. Writes <out>/<case>/..., <out>/summary.json and <out>/sheet.png.
@@ -27,6 +27,8 @@ def render_case(blender, model, case, out):
         cmd.append('--export-shape')
     if case.get('debug_supports'):
         cmd.append('--debug-supports')
+    if case.get('photo'):
+        cmd += ['--photo', str(ROOT/case['photo']), '--render-scale', str(case.get('render_scale', 1))]
     started = time.perf_counter()
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
     return proc.returncode, time.perf_counter()-started, proc.stdout[-2000:]+proc.stderr[-2000:]
@@ -48,6 +50,13 @@ def summarize(name, out, wall):
            'penetration_vertices': m['penetration_below_support']['vertices'],
            'visible_vertex_fraction': round(r['projection'].get('visible_vertex_fraction', 0), 3),
            'fully_in_frame': r['projection']['fully_in_frame']}
+    res = out/'result'/'result.json'
+    if res.exists():
+        q = json.loads(res.read_text(encoding='utf-8'))['quality']
+        row['occluded_fraction'] = q['occluded_fraction']
+        row['occlusion_iou_vs_micut_place'] = (q.get('occlusion_cross_check') or {}).get('iou')
+        row['final_warnings'] = q['warnings']
+        row['render_scale'] = r.get('render_scale', 1)
     comp = out/'compose'/'compose_report.json'
     if comp.exists():
         c = json.loads(comp.read_text(encoding='utf-8'))
@@ -57,7 +66,7 @@ def summarize(name, out, wall):
 
 
 def tile(out, row):
-    for name in ('compose/composite_depth.png', 'character.png'):
+    for name in ('result/final.jpg', 'compose/composite_depth.png', 'character.png'):
         if (out/name).exists():
             im = Image.open(out/name).convert('RGBA')
             break
@@ -97,7 +106,13 @@ def main():
             continue
         out = args.out/case['name']
         code, wall, log = render_case(args.blender, ROOT/testset['model'], case, out)
-        if code == 0 and case.get('compose_input') and args.placement_repo:
+        if code == 0 and case.get('photo'):
+            cmd = [sys.executable, str(ROOT/'tools/finalize.py'), '--render-dir', str(out),
+                   '--geometry-dir', str(ROOT/case['compose_input']), '--out', str(out/'result'), '--job-id', case['name']]
+            if args.placement_repo:
+                cmd += ['--placement-repo', str(args.placement_repo)]
+            subprocess.run(cmd, check=True, capture_output=True)
+        elif code == 0 and case.get('compose_input') and args.placement_repo:
             subprocess.run([sys.executable, str(ROOT/'tools/compose_depth.py'), '--placement-repo', str(args.placement_repo),
                             '--input-dir', str(ROOT/case['compose_input']), '--render-dir', str(out),
                             '--out', str(out/'compose')], check=True, capture_output=True)
