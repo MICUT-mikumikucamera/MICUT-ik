@@ -83,7 +83,24 @@ class FixtureTests(unittest.TestCase):
         sys.path.insert(0, str(root/'tools'))
         from gen_ik_fixtures import FIXTURE, cases
         stored = json.loads(FIXTURE.read_text(encoding='utf-8'))
-        self.assertEqual(json.loads(json.dumps(cases())), stored)
+        fresh = json.loads(json.dumps(cases()))
+
+        # libm differs in the last bit between platforms (Windows vs Linux CI): compare to 1e-9 like
+        # tests/ik.test.mjs, structure and non-float values exactly.
+        def check(a, b, path='$'):
+            if isinstance(a, float) or isinstance(b, float):
+                self.assertAlmostEqual(a, b, delta=1e-9, msg=path)
+            elif isinstance(a, dict):
+                self.assertEqual(a.keys(), b.keys(), path)
+                for k in a:
+                    check(a[k], b[k], f'{path}.{k}')
+            elif isinstance(a, list):
+                self.assertEqual(len(a), len(b), path)
+                for i, (x, y) in enumerate(zip(a, b)):
+                    check(x, y, f'{path}[{i}]')
+            else:
+                self.assertEqual(a, b, path)
+        check(fresh, stored)
 
 
 class ClampTests(unittest.TestCase):
