@@ -12,7 +12,7 @@
   "type": "module",
   "description": "MiCut placement adapters for Blender and VRM",
   "scripts": {
-    "test": "node --test tests/vrm_math.test.mjs",
+    "test": "node --test \"tests/*.test.mjs\"",
     "render:vrm": "node tools/render_vrm.mjs"
   }
 }

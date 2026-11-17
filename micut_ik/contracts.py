@@ -40,6 +40,7 @@ class Placement:
     pose_id: str = 'stand_default'
     anchor_type: str = 'feet_center_on_ground'
     support_candidate_id: int | None = None
+    selection: str | None = None  # how the placement side chose this spot (rule / jev / manual); passed through
 
     @classmethod
     def parse(cls, data, poses=None):
@@ -73,11 +74,14 @@ class Placement:
             direction = vector(data.get('facing_direction'), 3, 'facing_direction')
             if abs(direction[1]) > 1e-5 or math.hypot(direction[0], direction[2]) < 1e-8:
                 raise ContractError('facing_direction must be nonzero and horizontal (Y=0)')
+        selection = data.get('selection')
+        if selection is not None and (not isinstance(selection, str) or not selection):
+            raise ContractError('selection must be a nonempty string when provided')
         model_id = data.get('model_id')
         if model_id is not None and (not isinstance(model_id, str) or not model_id):
             raise ContractError('model_id must be a nonempty string when provided')
         return cls(anchor, rule, direction, model_id, pose['action'], pose['pose_id'], pose['anchor_type'],
-                   support_id)
+                   support_id, selection)
 
 
 def camera_contract(spatial):

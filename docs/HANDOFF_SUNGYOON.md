@@ -4,7 +4,7 @@
 
 ## 1. 모델·렌더 환경
 
-- 렌더: Blender 5.2 LTS, Cycles CPU. (VRM 경로는 비교용으로 유지, 아직 서기만)
+- 렌더: VRM 경로(three.js, `tools/render_vrm.mjs`)로 전환 중(11/13 회의). Blender 5.2 Cycles 경로도 유지. 두 경로는 같은 입력·포즈를 받고 manifest 수치가 같음(서기 1e-6 m 이내, 앉기 크기 차 2 mm 이내 확인)
 - 테스트 모델: `legend_pretty_miku_refuv.blend` (**임시**. 최종 공통 모델은 미정)
 - 최종 모델이 오면 `examples/model_profile.json`만 다시 쓰고, 그때 manifest를 새로 드림. 입력 형식은 그대로
 
@@ -30,7 +30,7 @@
 
 ## 5. 방향·포즈
 
-- 등록 포즈: `stand_default`, `stand_natural`, `sit_default`. 다른 `pose_id`는 오류.
+- 등록 포즈: `stand_default`, `stand_natural`, `sit_default`, 그리고 PM님 프리셋 27개(`MV01`~`MV15`, `COL_*` 12개, 전부 `action=stand`, 2026-11-16 추가, 목록은 `docs/POSE_IK.md`). 다른 `pose_id`는 오류. 앉는 프리셋은 없어서 좌판에는 `sit_default`.
 - 방향: `look_at_camera`(수평 회전만) 또는 `world_direction` + `facing_direction: [x, 0, z]`. 각도 단독 입력은 받지 않음.
 - 소파처럼 앞이 정해진 좌석은 `world_direction`으로 좌석 앞 방향을 주세요.
 
@@ -41,6 +41,7 @@
 | `action=sit`, `pose_id=sit_default` | 반영 |
 | `anchor_type=pelvis_seat_contact`, Y = 좌판 높이 | 반영. 범위 밖이면 `SUPPORT_OUT_OF_RANGE` |
 | `support_candidate_id` | 반영 (manifest `support`에 기록만) |
+| `selection` (선택, 문자열: `rule` / `jev` / `manual`) | 2026-11-16 추가. 배치 쪽 선택 방식. manifest와 `result.json`의 `placement.selection`으로 그대로 전달, 없으면 `"unknown"` |
 | 골반·발 접촉점 | manifest `contacts` |
 | 몸 충돌 프록시 | manifest `body_collision_proxy` (캡슐 14개, 머리카락·치마·소매 제외) |
 | 포즈별 형상 내보내기 | `render_stand.py --export-shape` → `shape.npz` (`export_stand_shape.py`와 같은 형식) |

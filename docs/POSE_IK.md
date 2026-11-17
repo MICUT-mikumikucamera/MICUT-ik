@@ -29,6 +29,26 @@
 `sit_default`의 좌판 높이 허용 범위는 0.30~0.60 m. 범위 밖이면 `SUPPORT_OUT_OF_RANGE` 오류.
 좌판이 높아 발이 안 닿으면 허벅지를 최대 15°까지 내리고, 그래도 안 닿으면 발이 뜬 채로 렌더하고 `feet_on_floor=false`, 보고서 `foot_warning`으로 알린다.
 
+### 프리셋 작업창 포즈 27개 (VRM 렌더 전용, 2026-11-16)
+
+PM님 프리셋 작업창 v0.6.0의 저장 조합 27개를 받아 등록했다. `pose_id`는 조합 ID 그대로다.
+
+- 곡 포즈: `MV01`~`MV15`
+- 컬렉션: `COL_GYARU`, `COL_V`, `COL_HALF`, `COL_HEART`, `COL_WAVE`, `COL_MIKU`, `COL_KISS`, `COL_CHEEK`, `COL_FLOWER`, `COL_GDG`, `COL_ALIEN`, `COL_LEEK`
+- 전부 `action=stand`, `anchor_type=feet_center_on_ground`. `MV12`(점프)도 바닥 위에서 뛰는 자세라 서기 계약을 쓰고, 발은 바닥에서 약 0.4 m 떠 있다(`pose_report.airborne=true`).
+- 앉는 프리셋은 없다. 좌판 배치는 계속 `sit_default`를 쓴다.
+
+파일 `poses/<ID>.json`의 `baked`에는 작업창 엔진이 IK·양팔 협동·손가락·의상 보정까지 끝낸 최종 raw 뼈 변환, 작업창 루트 변환(몸 돌리기 `bodyYaw` 포함), 얼굴 morph가 들어 있다. VRM 렌더는 이 값을 그대로 얹고 발 중앙 아래 바닥점을 기준점으로 배치한다. 몸 돌리기는 배치 방향 기준으로 그대로 유지된다.
+
+- **시선(2026-11-17)**: 작업창은 카메라(`source.gaze.point`, 작업창 좌표 [0, 1.3, 1.5] m)를 보도록 머리를 돌려 저장했다. 렌더 때 눈 사이에서 본 작업창 카메라 방향을 실제 사진 카메라 방향으로 옮기는 회전만큼 목(40%)·머리(60%)를 더 돌린다. PM님이 준 기울임과 카메라에서 살짝 비킨 각도는 그대로 남는다. 회전은 30°까지(`preset_look_limits.head_deg`), 눈은 머리 정면에서 12°까지 카메라를 본다. `gaze.target`이 `forward`인 `MV08`·`MV10`·`MV12`는 그대로 둔다. 손을 얼굴에 대거나 팔을 머리 옆으로 올린 포즈는 팔·손이 얼굴이나 앞머리에 원래 겹침(1 cm 미만이면 1 cm)보다 0.2 cm 넘게 더 들어가면 그만큼 덜 돌린다(`pose_report.look_at.reduced_for_hands`).
+- **트윈테일**: 작업창은 트윈테일을 기본 자세 그대로 둔다(27개 모두 같은 값). 렌더도 그 모양을 유지하고, 몸·팔·치마를 뚫는 부분만 아래 머리카락 정리로 밀어낸다.
+
+- 같은 모델에서만 동작한다. 렌더 시 `miku.vrm`의 SHA-256이 다르면 `MODEL_MISMATCH`.
+- Blender 경로는 이 포즈를 받지 않는다(오류).
+- 원본 `status`·`notices`(관통 경고, 자동 보정 내용)는 `source`에 보존하고, manifest `pose_report.notices`로 넘긴다. 팔·다리 겹침은 고치지 않고 `penetration_body`로 보고만 한다.
+- 다시 받으면 `python tools/import_preset_poses.py <poses.json>`으로 덮어쓴다.
+- 확인: `examples/spatial.preset_front.json` + `examples/placement.preset_front.json`(작업창 미리보기와 비슷한 정면 카메라)으로 27개를 렌더해 PM님 미리보기와 나란히 비교했고, 모두 같은 자세로 보였다.
+
 ## Blender에서 직접 포즈 잡기
 
 손으로 잡은 포즈를 `poses/<pose_id>.json`으로 바꾸는 도구가 `tools/export_pose.py`다.
@@ -70,6 +90,7 @@
 - `anchor_position`: 좌판 위 골반(좌골) 접촉 중심. Y = 좌판 높이.
 - 골반 접촉점은 렌더 쪽에서 메시로 계산한다: 엉덩이·허벅지 위쪽 vertex group 중 고관절 기준 뒤 14 cm~앞 5 cm 범위의 가장 낮은 면.
 - `support_candidate_id`는 그대로 manifest에 기록만 한다.
+- `selection`(선택): 배치 쪽 선택 방식(`rule` / `jev` / `manual`). 렌더는 해석하지 않고 manifest → `result.json`으로 넘긴다. 서기·앉기 모두 받는다.
 
 ## manifest에 추가된 항목
 
@@ -81,6 +102,7 @@
 | `body_collision_proxy` | 몸 충돌 캡슐 14개(몸통, 머리, 팔·손, 다리·발). 머리카락·치마·소매 제외. 반지름 = 해당 부위 정점 거리의 85% 값 |
 | `pose_report` | IK 결과: 다리·팔 도달 여부와 오차, 허벅지 각도, 발 바닥 접촉, 시선 잔여각, 표정, 정리된 머리카락·치마 뼈 수 |
 | `penetration_below_support` | 바닥(앉기는 좌판 포함) 아래로 들어간 정점 수를 머리카락/치마/몸으로 나눔 |
+| `penetration_body` | VRM 경로만. 몸끼리 1 cm 넘게 겹친 정점 수·최대 깊이·부위: 트윈테일↔몸·치마·팔(`hair`), 팔뚝·손↔몸·치마·반대 팔(`left_arm`·`right_arm`), 팔·손↔얼굴·앞머리(`arms_head`), 왼 정강이·발↔오른 다리(`legs`). 판정: 가장 가까운 상대 정점(4 cm 안)의 법선 안쪽 |
 
 `render_stand.py --export-shape`를 주면 `shape.npz`(성윤님 `export_stand_shape.py`와 같은 형식)를 같이 쓴다. 포즈 무관하게 깊이 합성에 쓸 수 있다.
 
@@ -123,6 +145,8 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools\final
 ## 한계와 다음 작업
 
 - 머리카락·치마는 물리 없이 뼈 단위로만 정리한다. 메시 두께 때문에 일부 정점이 지지면 아래로 들어갈 수 있고, 그 수는 `penetration_below_support`로 보고한다.
+- VRM 경로는 트윈테일 뼈를 뿌리부터 끝까지 보며, 자기 정점이 몸·팔·치마 안(6 cm 안의 가장 가까운 정점 법선 기준)이나 지지면 아래에 있으면 가장 깊은 정점이 빠져나올 만큼만 그 뼈를 돌린다(한 번에 30° 이하, 4회). 중력으로 늘어뜨리지 않는다. 서 있는 포즈, 앉은 포즈, 프리셋 모두 같다. Blender 경로(`posing.py`)에는 아직 없다.
+- three-vrm은 스프링본(트윈테일, 넥타이)의 `matrixAutoUpdate`를 꺼 둔다. 렌더는 물리를 돌리지 않으므로 로드 직후 다시 켠다. 켜기 전에는 이 뼈들에 준 회전이 무시돼 `sit_default`의 머리카락이 좌판 밑으로 6 cm 들어갔다.
 - 착석은 좌판 앞 가장자리 위치를 모른다. 허벅지를 내리면 좌판 안쪽에서 허벅지 아랫면이 몇 mm~1 cm 들어갈 수 있다. 앞 가장자리를 입력으로 받으면 허벅지가 가장자리 너머에서만 내려가게 바꿀 수 있다.
 - 손가락은 같은 각도로 일괄 굽힘. 손 제스처(브이, 손 흔들기)는 다음 포즈로 추가.
 - 등받이·팔걸이 기대기(접촉점 여러 개)는 v2.

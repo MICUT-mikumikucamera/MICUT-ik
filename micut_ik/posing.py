@@ -372,6 +372,9 @@ def capsules(rig, verts):
 # --- top level --------------------------------------------------------------------------------
 def apply_pose(rig, pose, scale, rest, support_height_m, camera_src_of):
     """Apply a pose file. Returns (anchor_src, report). camera_src_of(anchor_src) -> camera in armature space."""
+    if pose.get('baked'):
+        raise ContractError(f"{pose['pose_id']} is a preset-workshop pose (raw VRM bone transforms); "
+                            'render it with tools/render_vrm.mjs')
     rig.unit_scale = scale
     report = {'pose_id': pose['pose_id'], 'steps': len(pose.get('steps', []))}
     apply_steps(rig, pose.get('steps', []))

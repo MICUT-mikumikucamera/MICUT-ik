@@ -17,6 +17,13 @@ class ContractTests(unittest.TestCase):
     def test_request_accepts_sungyoon_example(self):
         self.assertEqual(Placement.parse(self.request).anchor_position, (.3, 0, .8))
 
+    def test_selection_is_passed_through(self):
+        self.assertIsNone(Placement.parse(self.request).selection)
+        self.assertEqual(Placement.parse({**self.request, 'selection': 'jev'}).selection, 'jev')
+        for bad in ('', 3):
+            with self.subTest(bad=bad), self.assertRaises(ContractError):
+                Placement.parse({**self.request, 'selection': bad})
+
     def test_unit_and_pose_are_not_silently_coerced(self):
         for key, value in [('unit', 'cm'), ('action', 'sit'), ('pose_id', 'unknown'),
                            ('coordinate_frame', 'camera')]:
@@ -53,6 +60,15 @@ class ContractTests(unittest.TestCase):
         for pose in poses.values():
             self.assertIn(pose['anchor_type'], ('feet_center_on_ground', 'pelvis_seat_contact'))
             self.assertIn(pose['action'], ('stand', 'sit'))
+
+    def test_preset_workshop_poses_are_registered(self):
+        poses = pose_registry()
+        presets = [p for p in poses.values() if p.get('baked')]
+        self.assertEqual(len(presets), 27)
+        for pose in presets:
+            self.assertEqual((pose['action'], pose['anchor_type']), ('stand', 'feet_center_on_ground'))
+            self.assertEqual(len(pose['baked']['raw_bones']), 138)
+        self.assertEqual(Placement.parse({**self.request, 'pose_id': 'MV05'}).pose_id, 'MV05')
 
     def test_local_frame_matches_placement_repo(self):
         # x = character right r=[f_z,0,-f_x]; facing the camera (-Z) puts character right on world -X.

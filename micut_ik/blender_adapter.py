@@ -141,6 +141,7 @@ def prepare_model(profile, placement, camera, pose):
         'foot_anchor_method': 'midpoint of weighted left/right near-sole bounds; lower sole is ground',
         'support': {'type': 'seat' if seated else 'floor', 'height_m': anchor[1],
                     'support_candidate_id': placement.support_candidate_id},
+        'selection': placement.selection,
         'contacts': {
             'anchor': {'type': placement.anchor_type, 'local': [0., 0., 0.], 'world': list(anchor)},
             'feet': {side: {'world': foot_world[side], 'local': list(to_local(foot_world[side], anchor, direction)),

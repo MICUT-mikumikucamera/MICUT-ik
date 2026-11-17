@@ -73,6 +73,19 @@ class SeatedTargetTests(unittest.TestCase):
             self.assertAlmostEqual(dist(end, target), 0, places=6)
 
 
+class FixtureTests(unittest.TestCase):
+    def test_committed_fixture_matches_python(self):
+        """web/ik.js is tested against this fixture; regenerate with tools/gen_ik_fixtures.py after changing ik.py."""
+        import json
+        from pathlib import Path
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root/'tools'))
+        from gen_ik_fixtures import FIXTURE, cases
+        stored = json.loads(FIXTURE.read_text(encoding='utf-8'))
+        self.assertEqual(json.loads(json.dumps(cases())), stored)
+
+
 class ClampTests(unittest.TestCase):
     def test_clamp_limits_angle(self):
         out = ik.clamp_direction((0, 0, 1), (1, 0, 0), 30)
