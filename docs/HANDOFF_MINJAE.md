@@ -9,7 +9,7 @@
 
 ## 먼저 볼 파일
 
-**VRM 직접 렌더 추가:** 새 `3000533088641481097 (1).vrm`은 정상적인 미쿠 VRM 1.0입니다. `npm ci` 후 `tools/render_vrm.mjs`로 Blender 없이 실행할 수 있습니다. `web/vrm.js`가 모델·포즈·발 기준점·카메라·렌더를 담당하고, `web/vrm_math.js`가 입력·좌표 검증을 담당합니다. 기존 Blender 경로도 유지합니다.
+**VRM 직접 렌더 추가:** 모델은 `local/models/miku.vrm`(처음 받은 `3000533088641481097 (1).vrm`과 같은 파일, 이름만 바꿈)입니다. `npm ci` 후 `tools/render_vrm.mjs`로 Blender 없이 실행할 수 있습니다. `web/vrm.js`가 배치·카메라·조명·패스 렌더를, `web/vrm_pose.js`가 포즈·IK(`posing.py` 이식)를, `web/vrm_math.js`가 입력·좌표 검증을 담당합니다. 기존 Blender 경로도 유지합니다.
 
 1. `examples/model_profile.json`: 원본 .blend의 메시·리그·발 그룹, 목표 키 설정
 2. `micut_ik/contracts.py`: 배치 입력 검증, 월드 좌표·투영 계산
@@ -27,9 +27,9 @@
 
 ## 원본 모델 관련 주의
 
-처음 제공된 VRM(17,576바이트)은 `Cube` 메시 1개/위치 24개와 휴머노이드 뼈대로 구성됨. 이후 전달된 `(1).vrm`은 30,918,696바이트, 22,530개 정점과 이미지 6개를 포함하며 직접 렌더로 정상 외형 확인. 두 파일을 혼동하지 않음.
+처음 제공된 VRM(17,576바이트)은 `Cube` 메시 1개/위치 24개와 휴머노이드 뼈대로 구성됨. 이후 전달된 `(1).vrm`(지금의 `miku.vrm`)은 30,918,696바이트, 22,530개 정점과 이미지 6개를 포함하며 직접 렌더로 정상 외형 확인. 두 파일을 혼동하지 않음.
 
-VRM 경로는 three-vrm의 표준 휴머노이드 매핑을 사용. Blender 프로필의 MMD식 뼈 이름을 VRM에 그대로 적용하지 않음. 새로운 VRM으로 교체할 때는 외형·휴머노이드·발 가중치를 다시 검증.
+VRM 경로는 이 VRM이 Blender 모델과 같은 리그(같은 뼈 이름·vertex group·단위)라서 `examples/model_profile.json`의 MMD식 뼈 이름을 raw bone에 그대로 씀. three-vrm의 정규화 뼈·스프링본·표정 매니저는 쓰지 않음(`vrm.update()`를 부르지 않음). 새로운 VRM으로 교체할 때는 프로필 이름·발 가중치를 다시 검증.
 
 ## 구현 시 지킬 연결 기준
 

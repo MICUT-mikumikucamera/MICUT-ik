@@ -9,7 +9,7 @@
 - Python 3.10+ (계약·IK 단위 테스트는 표준 라이브러리만 사용)
 - 테스트 세트·합성 도구는 numpy, pillow, OpenEXR 필요: `uv run --no-project --with numpy --with pillow --with OpenEXR python ...`
 - 깊이 합성은 배치 저장소 `MICUT--placement-decision`을 옆 폴더에 클론해 `--placement-repo`로 넘긴다
-- VRM 경로(`web/`, `tools/render_vrm.mjs`)는 Node 22+ (`npm ci`). 아직 `stand_default`만 받는다
+- VRM 경로(`web/`, `tools/render_vrm.mjs`)는 Node 22+ (`npm ci`)와 Chrome/Edge. 모델은 `local/models/miku.vrm`. 등록 포즈 전부 받는다
 
 ## 파일 위치
 
@@ -23,6 +23,9 @@
 | `examples/model_profile.json` | 모델 전용 이름·축·vertex group. 모델 교체 시 이 파일만 새로 쓴다 |
 | `examples/testset.json` | 회귀 테스트 세트 |
 | `tools/render_stand.py` | Blender 진입점 (모든 포즈) |
+| `web/vrm_pose.js` | VRM 포즈·IK. `posing.py` 이식본이라 **둘을 같이 고친다** |
+| `web/vrm.js`, `tools/render_vrm.mjs` | VRM 배치·카메라·사진 조명·패스 렌더(화소 상자 + 타일) / CLI 진입점(분할 업로드, 감시 타이머) |
+| `tools/pose_sheet.py`, `tools/compare_renders.py` | 등록 포즈 전체 렌더 시트 / 두 렌더의 화소 비교 |
 | `tools/export_pose.py` | Blender에서 손으로 잡은 포즈 → 포즈 JSON |
 | `local/` | 모델·사진·기하 산출물 (Git 제외) |
 | `outputs/` | 렌더 결과 (Git 제외) |
@@ -36,6 +39,8 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools/run_t
   --placement-repo ..\MICUT-placement-decision --out outputs/testset   # 전체 렌더 + 최종 합성 + 비교 시트
 uv run --no-project --with numpy --with pillow --with OpenEXR python tools/finalize.py `
   --render-dir outputs\x --geometry-dir local\geometry\sample1 --out outputs\results\x\1   # final.jpg + result.json
+node tools/render_vrm.mjs --spatial <spatial.json> --placement <placement.json> --photo <photo.jpg> --out outputs\x   # VRM 렌더
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/pose_sheet.py --out outputs/pose_sheet   # 포즈 전체 시트
 .\scripts\render.ps1 -Model local\models\<model>.blend -Spatial <spatial.json> -Placement <placement.json> -Out outputs\x -ExportShape
 .\scripts\export_pose.ps1 -PosedBlend local\pose_work\<copy>.blend -PoseId <id> -Base poses\stand_natural.json
 ```
@@ -49,6 +54,7 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools/final
 - manifest 로컬 좌표는 x = 캐릭터 오른쪽(r = [f_z, 0, -f_x]), y = 위, z = 바라보는 방향, 원점 = anchor. 배치 저장소 `micut_place.shape`와 같아야 한다.
 - 포즈 파일은 캐릭터 기준 `[오른쪽, 위, 앞]`으로 쓰고 뼈는 프로필 키(`left_upper_arm`, `left_index_1` 등)로 부른다. 모델 전용 뼈 이름을 쓰면 `model_specific: true`.
 - `stand_default`는 이전 manifest와 수치가 같아야 한다(배치 저장소가 이 수치로 검사함). 포즈·IK 코드를 바꾸면 `docs/validation/stand_model_manifest.json`의 크기·로컬 경계·발 접촉점과 비교한다(1e-6 m 이내).
-- 포즈·IK를 바꾼 뒤에는 단위 테스트와 테스트 세트를 돌리고 `sheet.png`를 눈으로 확인한다. `summary.json`의 `legs_reached`, `feet_on_floor`, `penetration_vertices`를 본다.
+- VRM 렌더 코드를 바꾸면 `tools/pose_sheet.py`로 등록 포즈 전부가 렌더되는지, 바꾸기 전 렌더와 `tools/compare_renders.py`로 화소 차이를 확인한다. 큰 사진(4284×5712)도 한 번 돌린다.
+- 포즈·IK를 바꾼 뒤에는 단위 테스트와 테스트 세트를 돌리고 `sheet.png`를 눈으로 확인한다. `summary.json`의 `legs_reached`, `feet_on_floor`, `penetration_vertices`를 본다. VRM 경로는 manifest `penetration_body`(몸끼리 겹침)도 본다.
 - 입력 계약을 바꾸면 `docs/HANDOFF_SUNGYOON.md`와 `docs/POSE_IK.md`를 같이 고친다.
 - 문서는 한국어, 코드·주석은 영어.

@@ -1,0 +1,10 @@
+{
+  "coordinate_frame": "geometry_world",
+  "unit": "m",
+  "anchor_type": "feet_center_on_ground",
+  "anchor_position": [0.0, 0.0, 4.0],
+  "action": "stand",
+  "pose_id": "MV05",
+  "facing_rule": "look_at_camera",
+  "selection": "manual"
+}

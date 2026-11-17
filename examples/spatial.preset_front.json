@@ -1,0 +1,6 @@
+{
+  "note": "Synthetic camera like the preset workshop front preview: 650x650, height 0.95 m, level, character 4 m ahead. Not a real photo.",
+  "image": {"width": 650, "height": 650},
+  "camera": {"fx": 1330.0, "fy": 1330.0, "cx": 325.0, "cy": 277.0},
+  "ground_plane": {"cam_to_world": {"R": [[1, 0, 0], [0, -1, 0], [0, 0, 1]], "t": [0.0, 0.95, 0.0]}}
+}
