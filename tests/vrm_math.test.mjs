@@ -97,3 +97,18 @@ test("out-of-frame geometry reports clipping without automatic resizing", () => 
   assert.equal(report.fully_in_frame, false);
   assert.equal(report.automatic_rescale, false);
 });
+
+test("geometry.v5 coordinate_contract is checked when present", async () => {
+  const { originalScale } = await import("../web/vrm_math.js");
+  const contract = { frame: "geometry_world", unit: "m", axes: ["right", "up", "forward"], handedness: "left",
+    image_size: [spatial.image.width, spatial.image.height] };
+  assert.doesNotThrow(() => cameraFromSpatial({ ...spatial, coordinate_contract: contract }));
+  for (const bad of [{ handedness: "right" }, { unit: "cm" }, { axes: ["right", "up", "back"] }, { image_size: [1, 1] }])
+    assert.throws(() => cameraFromSpatial({ ...spatial, coordinate_contract: { ...contract, ...bad } }), { code: "INVALID_GEOMETRY" });
+  const w = spatial.image.width, h = spatial.image.height;
+  assert.equal(originalScale({ ...spatial, image: { ...spatial.image, original_size: [w * 4, h * 4] } }), 4);
+  assert.equal(originalScale({ ...spatial, image: { ...spatial.image, original_size: [w * 9, h * 9] },
+    camera_source: { crop_xywh: [10, 20, w * 2, h * 2] } }), 2);
+  assert.throws(() => originalScale(spatial), { code: "INVALID_ARGUMENT" });
+  assert.throws(() => originalScale({ ...spatial, image: { ...spatial.image, original_size: [w * 2, h * 3] } }), { code: "INVALID_GEOMETRY" });
+});

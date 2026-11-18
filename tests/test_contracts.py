@@ -62,13 +62,29 @@ class ContractTests(unittest.TestCase):
             self.assertIn(pose['action'], ('stand', 'sit'))
 
     def test_preset_workshop_poses_are_registered(self):
+        import json
+        from pathlib import Path
+        lock = json.loads((Path(__file__).resolve().parents[1]/'presets.lock.json').read_text(encoding='utf-8'))
         poses = pose_registry()
-        presets = [p for p in poses.values() if p.get('baked')]
-        self.assertEqual(len(presets), 27)
-        for pose in presets:
-            self.assertEqual((pose['action'], pose['anchor_type']), ('stand', 'feet_center_on_ground'))
+        presets = {k: p for k, p in poses.items() if p.get('baked')}
+        self.assertEqual(sorted(presets), lock['poses'])
+        for pose in presets.values():
+            self.assertIn((pose['action'], pose['anchor_type']),
+                          [('stand', 'feet_center_on_ground'), ('sit', 'pelvis_seat_contact')])
             self.assertEqual(len(pose['baked']['raw_bones']), 138)
         self.assertEqual(Placement.parse({**self.request, 'pose_id': 'MV05'}).pose_id, 'MV05')
+
+    def test_coordinate_contract_checked_when_present(self):
+        contract = {'frame': 'geometry_world', 'unit': 'm', 'axes': ['right', 'up', 'forward'], 'handedness': 'left',
+                    'image_size': [self.spatial['image']['width'], self.spatial['image']['height']]}
+        camera_contract({**self.spatial, 'coordinate_contract': contract})
+        for bad in ({'handedness': 'right'}, {'unit': 'cm'}, {'axes': ['right', 'up', 'back']}, {'image_size': [1, 1]}):
+            with self.subTest(bad=bad), self.assertRaises(ContractError):
+                camera_contract({**self.spatial, 'coordinate_contract': {**contract, **bad}})
+
+    def test_pose_ref_is_vrm_only(self):
+        with self.assertRaises(ContractError):
+            Placement.parse({**self.request, 'pose_id': 'gen_c0', 'pose_ref': 'poses_runtime/gen_c0.json'})
 
     def test_local_frame_matches_placement_repo(self):
         # x = character right r=[f_z,0,-f_x]; facing the camera (-Z) puts character right on world -X.

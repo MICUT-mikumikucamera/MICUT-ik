@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { cameraFromSpatial, scaledCamera, facing, project, projectionReport, toLocal, LOCAL_FRAME_NOTE } from "./vrm_math.js";
-import { Rig, SIDES, applyPose, bodyPenetration, footPoints, capsules, penetration, restMeasure } from "./vrm_pose.js";
+import { Rig, SIDES, applyPose, bodyPenetration, footPoints, capsules, penetration, restMeasure, vertexClass } from "./vrm_pose.js";
+import { loadScene } from "./scene_field.js";
 
 const arr = (v) => [v.x, v.y, v.z];
 const NEAR = 0.05,
@@ -467,6 +468,45 @@ function regionEdgeAlpha(colour, r, k) {
   return m;
 }
 
+function scenePenetration(rig, verts, inside, tol, scale) {
+  const counts = {}, objects = {};
+  let deepest = 0;
+  verts.forEach((v, i) => {
+    const { gap, id } = inside(v);
+    if (gap <= tol) return;
+    const c = vertexClass(rig, i);
+    const cls = c === "hair" || c === "head_hair" || c === "skirt" ? c : "body";
+    counts[cls] = (counts[cls] || 0) + 1;
+    objects[id] = (objects[id] || 0) + 1;
+    deepest = Math.max(deepest, gap);
+  });
+  return { vertices: counts, deepest_m: deepest * scale, by_object_id: objects };
+}
+
+function workshopDump(rig, meshes, planes, pose) {
+  const bones = [];
+  rig.root.traverse((o) => {
+    if (o.isBone) bones.push({ name: o.name, position: o.position.toArray(), rotation: o.quaternion.toArray(), scale: o.scale.toArray() });
+  });
+  const lift = new THREE.Vector3(0, -planes.floor_src, 0).applyQuaternion(rig.root.quaternion);
+  return {
+    name: `${pose.pose_id} (dumped from the IK renderer)`,
+    root_transform: {
+      position: rig.root.position.clone().add(lift).toArray(),
+      rotation: rig.root.quaternion.toArray(),
+      scale: rig.root.scale.toArray(),
+    },
+    raw_bone_transforms: bones,
+    mesh_morphs: meshes.map((m) => ({
+      mesh: m.name,
+      weights: Object.fromEntries(Object.entries(m.morphTargetDictionary || {}).map(([k, i]) => [k, m.morphTargetInfluences[i]])),
+    })),
+    status: "dumped",
+    notices: [],
+    seat_height_in_dump_m: planes.seat_src !== undefined ? (planes.seat_src - planes.floor_src) * rig.unitScale : null,
+  };
+}
+
 async function main() {
   const started = performance.now();
   const job = await (await fetch("/job.json")).json();
@@ -527,13 +567,31 @@ async function main() {
       .multiply(new THREE.Matrix4().makeTranslation(-src.x, -src.y, -src.z));
   const cam3 = new THREE.Vector3(k.t[0], k.t[1], -k.t[2]);
   const cameraSrcOf = (src) => cam3.clone().applyMatrix4(rootMatrix(src).invert());
+  // Photo obstacles (geometry.v5 depth + object masks): sceneOf(anchorSrc)(rig point) -> {gap, id}, gap
+  // in rig units (> 0: inside a nearby object), for the hair clean-up and the scene penetration report.
+  const sceneAt = settings.scene ? await loadScene(settings.scene, k) : null;
+  const sceneOf = sceneAt
+    ? (src) => {
+        const m = rootMatrix(src);
+        return (v) => {
+          const w = v.clone().applyMatrix4(m);
+          const r = sceneAt([w.x, w.y, -w.z]);
+          return { gap: r.gap / scale, id: r.id };
+        };
+      }
+    : null;
+  if (sceneAt) mark("scene obstacles loaded");
 
-  const { anchorSrc, report: poseReport, support } = applyPose(rig, pose, scale, rest, anchor[1], cameraSrcOf);
+  const { anchorSrc, report: poseReport, support, planes } = applyPose(rig, pose, scale, rest, anchor[1], cameraSrcOf, sceneOf);
+  // Check/dev option (--dump-pose 1): the posed rig in the preset-workshop export format (raw bones in the
+  // workshop frame, floor y=0), so an own-engine pose can be fed back as a pose_ref or a preset.
+  const poseDump = settings.dump_pose ? workshopDump(rig, meshes, planes, pose) : null;
   const vertsSrc = rig.vertices();
   const feetSrc = footPoints(rig, vertsSrc);
   const proxies = capsules(rig, vertsSrc);
   const [penCounts, penDepth, penGroups] = penetration(rig, vertsSrc, support, 0.005 / scale);
   const bodyPen = bodyPenetration(rig, vertsSrc, 0.01 / scale, 0.04 / scale);
+  const scenePen = sceneOf ? scenePenetration(rig, vertsSrc, sceneOf(anchorSrc), 0.01 / scale, scale) : null;
   for (const v of Object.values(bodyPen)) v.deepest_m = v.deepest * scale, delete v.deepest;
   mark("contacts measured");
   const total = rootMatrix(anchorSrc);
@@ -592,6 +650,10 @@ async function main() {
       vertices: penCounts, deepest_m: penDepth * scale, by_group: penGroups,
       note: "support = floor, plus the seat plane inside +-seat_half_extent_m of the anchor for seated poses",
     },
+    penetration_scene: scenePen
+      ? { ...scenePen, note: "vertices behind a visible photo surface (geometry depth) by 1 cm..thickness: 0.30 m for the " +
+          "supporting object, 0.06 m for others; floor excluded. Not computed without geometry.v5 depth/masks" }
+      : null,
     penetration_body: {
       ...bodyPen,
       note: "intruder vertices more than 1 cm inside the nearest host vertex (posed normal side, within 4 cm); " +
@@ -856,7 +918,7 @@ async function main() {
   if (seated && !Object.values(legs).every((v) => v.feet_on_floor ?? true))
     report.foot_warning = "seat too high for both feet to reach the floor; feet hang";
   report.gl_extensions = ['EXT_float_blend', 'EXT_color_buffer_float', 'EXT_color_buffer_half_float'].filter((e) => renderer.extensions.has(e));
-  window.renderResult = { manifest, report };
+  window.renderResult = { manifest, report, poseDump };
   window.renderReady = true;
 }
 

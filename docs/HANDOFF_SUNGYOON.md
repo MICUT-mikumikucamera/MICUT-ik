@@ -30,7 +30,8 @@
 
 ## 5. 방향·포즈
 
-- 등록 포즈: `stand_default`, `stand_natural`, `sit_default`, 그리고 PM님 프리셋 27개(`MV01`~`MV15`, `COL_*` 12개, 전부 `action=stand`, 2026-11-16 추가, 목록은 `docs/POSE_IK.md`). 다른 `pose_id`는 오류. 앉는 프리셋은 없어서 좌판에는 `sit_default`.
+- 등록 포즈: `stand_default`, `stand_natural`, `sit_default`, 그리고 PM님 프리셋 저장소(micut-presets) v0.6.5의 28개(`MV01`~`MV15`, `COL_*` 12개, `EX01`, 전부 `action=stand`, 목록은 `presets.lock.json`). 다른 `pose_id`는 `pose_ref`가 없으면 오류.
+- 새로 조합한 포즈(2026-11-19 추가, VRM 렌더만): `pose_id`(등록 포즈와 겹치지 않는 새 ID)와 `pose_ref`(작업창 내보내기 JSON, `placement.json` 기준 상대 경로)를 같이 주세요. `action`·`anchor_type`은 그 포즈의 기본 자세에 맞춰야 합니다. 의자 기본 자세(`B05`~`B07`)는 `action=sit`, `pelvis_seat_contact`이고 다리는 실제 좌판 높이에 맞춰 렌더 때 다시 맞춥니다. 자세한 규칙은 `docs/POSE_IK.md`.
 - 방향: `look_at_camera`(수평 회전만) 또는 `world_direction` + `facing_direction: [x, 0, z]`. 각도 단독 입력은 받지 않음.
 - 소파처럼 앞이 정해진 좌석은 `world_direction`으로 좌석 앞 방향을 주세요.
 
@@ -38,7 +39,7 @@
 
 | SEATING_PREP 항목 | 상태 |
 |---|---|
-| `action=sit`, `pose_id=sit_default` | 반영 |
+| `action=sit`, `pose_id=sit_default` | 반영. 의자 기본 자세의 `pose_ref` 포즈도 받음(좌판 0.30~0.60 m, 높은 좌석 `B07`은 0.55~0.90 m) |
 | `anchor_type=pelvis_seat_contact`, Y = 좌판 높이 | 반영. 범위 밖이면 `SUPPORT_OUT_OF_RANGE` |
 | `support_candidate_id` | 반영 (manifest `support`에 기록만) |
 | `selection` (선택, 문자열: `rule` / `jev` / `manual`) | 2026-11-16 추가. 배치 쪽 선택 방식. manifest와 `result.json`의 `placement.selection`으로 그대로 전달, 없으면 `"unknown"` |

@@ -9,7 +9,8 @@
 - Python 3.10+ (계약·IK 단위 테스트는 표준 라이브러리만 사용)
 - 테스트 세트·합성 도구는 numpy, pillow, OpenEXR 필요: `uv run --no-project --with numpy --with pillow --with OpenEXR python ...`
 - 깊이 합성은 배치 저장소 `MICUT--placement-decision`을 옆 폴더에 클론해 `--placement-repo`로 넘긴다
-- VRM 경로(`web/`, `tools/render_vrm.mjs`)는 Node 22+ (`npm ci`)와 Chrome/Edge. 모델은 `local/models/miku.vrm`. 등록 포즈 전부 받는다
+- VRM 경로(`web/`, `tools/render_vrm.mjs`)는 Node 22+ (`npm ci`)와 Chrome/Edge. 모델은 `local/models/miku.vrm`. 등록 포즈 전부와 `pose_ref` 포즈를 받는다
+- PM님 프리셋 저장소 `micut-presets`를 옆 폴더에 클론해 둔다(`node tools/import_presets.mjs`가 기본으로 `..\micut-presets`를 읽는다)
 
 ## 파일 위치
 
@@ -19,7 +20,10 @@
 | `micut_ik/ik.py` | 엔진 독립 IK 수학. **bpy 의존 금지** |
 | `micut_ik/posing.py` | Blender 포즈 적용, IK, 시선, 머리카락·치마 정리, 몸 프록시 |
 | `micut_ik/blender_adapter.py` | 모델 로드·배율·배치·카메라·렌더·manifest |
-| `poses/*.json` | 등록 포즈. 여기 있는 `pose_id`만 입력으로 받는다 |
+| `poses/*.json` | 등록 포즈. 여기 있는 `pose_id`만 입력으로 받는다(VRM 경로는 `pose_ref` 파일도). PM님 프리셋은 `tools/import_presets.mjs`가 micut-presets에서 만든다. 손으로 고치지 않는다 |
+| `presets.lock.json` | 가져온 micut-presets 버전·커밋·해시·포즈 목록 |
+| `web/scene_field.js` | 기하 깊이·물체 마스크 → "사진 물체 안인가" 판정(머리카락·앉기 다리 정리, `penetration_scene`) |
+| `web/preset_pose.js`, `tools/pose_ref.mjs` | 작업창 내보내기 → 포즈 변환(가져오기·`pose_ref` 공용) / `pose_ref` 경로 검사와 읽기 |
 | `examples/model_profile.json` | 모델 전용 이름·축·vertex group. 모델 교체 시 이 파일만 새로 쓴다 |
 | `examples/testset.json` | 회귀 테스트 세트 |
 | `tools/render_stand.py` | Blender 진입점 (모든 포즈) |
@@ -41,6 +45,7 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools/final
   --render-dir outputs\x --geometry-dir local\geometry\sample1 --out outputs\results\x\1   # final.jpg + result.json
 node tools/render_vrm.mjs --spatial <spatial.json> --placement <placement.json> --photo <photo.jpg> --out outputs\x   # VRM 렌더
 uv run --no-project --with numpy --with pillow --with OpenEXR python tools/pose_sheet.py --out outputs/pose_sheet   # 포즈 전체 시트
+node tools/import_presets.mjs [--check]       # micut-presets → poses/ + presets.lock.json
 .\scripts\render.ps1 -Model local\models\<model>.blend -Spatial <spatial.json> -Placement <placement.json> -Out outputs\x -ExportShape
 .\scripts\export_pose.ps1 -PosedBlend local\pose_work\<copy>.blend -PoseId <id> -Base poses\stand_natural.json
 ```
@@ -57,4 +62,5 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools/pose_
 - VRM 렌더 코드를 바꾸면 `tools/pose_sheet.py`로 등록 포즈 전부가 렌더되는지, 바꾸기 전 렌더와 `tools/compare_renders.py`로 화소 차이를 확인한다. 큰 사진(4284×5712)도 한 번 돌린다.
 - 포즈·IK를 바꾼 뒤에는 단위 테스트와 테스트 세트를 돌리고 `sheet.png`를 눈으로 확인한다. `summary.json`의 `legs_reached`, `feet_on_floor`, `penetration_vertices`를 본다. VRM 경로는 manifest `penetration_body`(몸끼리 겹침)도 본다.
 - 입력 계약을 바꾸면 `docs/HANDOFF_SUNGYOON.md`와 `docs/POSE_IK.md`를 같이 고친다.
+- 프리셋은 micut-presets가 원본이다. 바뀌면 `import_presets.mjs`로 가져오고 `pose_sheet.py`로 전부 렌더해 본다. `poses/`의 프리셋 파일을 직접 고치지 않는다.
 - 문서는 한국어, 코드·주석은 영어.

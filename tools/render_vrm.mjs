@@ -13,7 +13,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
-import { ContractError, cameraFromSpatial, validatePlacement } from "../web/vrm_math.js";
+import { ContractError, cameraFromSpatial, originalScale, validatePlacement } from "../web/vrm_math.js";
+import { loadPoseRef } from "./pose_ref.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_ID = "appearance-miku-vrm1-local-v1";
@@ -43,6 +44,28 @@ const num = (name, min) => {
   if (!Number.isFinite(v) || v < min) throw new ContractError(`--${name} must be a number >= ${min}`, "INVALID_ARGUMENT");
   return v;
 };
+
+// Scene obstacles for the pose clean-up (web/scene_field.js): the geometry step's depth, validity and
+// object masks next to spatial_info.json. Older geometry without them (or --scene off) renders without.
+function sceneFiles(spatial, dir, placement) {
+  if (args.scene === "off") return null;
+  const files = {
+    "depth.npy": path.join(dir, "depth.npy"),
+    "validity.png": path.join(dir, spatial.depth_validity?.file ?? "depth_validity.png"),
+    "masks.png": path.join(dir, "masks.png"),
+  };
+  if (!Object.values(files).every(existsSync) || !Array.isArray(spatial.objects)) return null;
+  const seat = (spatial.candidates?.seats || []).find((s) => s.id === placement?.support_candidate_id);
+  return {
+    files,
+    spec: {
+      floor_ids: spatial.objects.filter((o) => o.label === "floor").map((o) => o.id),
+      support_object_id: seat?.object_id ?? null,
+      near_m: 0.06,
+      support_m: 0.3,
+    },
+  };
+}
 
 function npy(data, shape) {
   let header = `{'descr': '<f4', 'fortran_order': False, 'shape': (${shape.join(", ")}${shape.length === 1 ? "," : ""}), }`;
@@ -85,8 +108,11 @@ try {
     poses[p.pose_id] = p;
   }
   const rawPlacement = await readJson(args.placement);
+  const poseRef = await loadPoseRef(rawPlacement, args.placement, poses);
+  if (poseRef) poses[rawPlacement.pose_id] = poseRef.pose;
   const placement = validatePlacement(rawPlacement, poses);
   const spatial = await readJson(args.spatial);
+  const scene = sceneFiles(spatial, path.dirname(path.resolve(args.spatial)), rawPlacement);
   const k = cameraFromSpatial(spatial);
   const profile = await readJson(args.profile);
   if (placement.model_id && placement.model_id !== MODEL_ID)
@@ -101,13 +127,16 @@ try {
       height,
       model_id: MODEL_ID,
       photo: Boolean(photo),
-      render_scale: num("render-scale", 0.1),
+      // "original": the photo's own resolution, from spatial_info image.original_size (geometry.v5)
+      render_scale: args["render-scale"] === "original" ? originalScale(spatial) : num("render-scale", 0.1),
       supersample: Math.round(num("supersample", 1)),
       exposure: num("exposure", 0),
       ceiling_gain: num("ceiling-gain", 0),
       key_share_min: num("key-share-min", 0),
       sky_samples: Math.round(num("sky-samples", 1)),
       full_frame_regions: args.regions === "full", // check only: passes cover the whole frame
+      dump_pose: args["dump-pose"] === "1", // check/dev only: write pose_dump.json (workshop format)
+      scene: scene?.spec ?? null,
     },
   };
   const data = await fs.readFile(model);
@@ -158,6 +187,7 @@ try {
       let file;
       if (pathname === "/model.vrm") file = model;
       else if (pathname === "/photo.jpg" && photo) file = photo;
+      else if (pathname.startsWith("/scene/") && scene?.files[pathname.slice(7)]) file = scene.files[pathname.slice(7)];
       else if (pathname === "/") file = path.join(root, "web/vrm.html");
       else if (pathname.startsWith("/web/")) {
         file = path.resolve(root, "." + pathname);
@@ -207,9 +237,22 @@ try {
   await Promise.race([page.waitForFunction(() => window.renderReady || window.renderError, {}, { timeout: limitS * 1000 }), crashed]);
   const error = await page.evaluate(() => window.renderError);
   if (error) throw new ContractError(error.message, error.code);
-  const { manifest, report } = await page.evaluate(() => window.renderResult);
+  const { manifest, report, poseDump } = await page.evaluate(() => window.renderResult);
+  if (poseDump) {
+    // --dump-base picks the workshop base the dump claims (B05 chair for seated poses by default).
+    const base = args["dump-base"] || (placement.action === "sit" ? "B05" : "B01");
+    poseDump.combo = {
+      schema: "micut-pose-combo/0.6", version: "dump", modelSha256: hash,
+      base: { id: base, params: placement.action === "sit" ? { seatHeight: placement.anchor_position[1] } : {} },
+      bodyYaw: 0, gaze: { target: "camera", point: [0, 1.3, 1.5] },
+    };
+    await fs.writeFile(path.join(out, "pose_dump.json"), JSON.stringify(poseDump) + "\n");
+  }
   manifest.source_file_name = path.basename(model);
   manifest.source_file_sha256 = hash;
+  manifest.pose_source = poseRef
+    ? { kind: "pose_ref", file: poseRef.ref, sha256: poseRef.sha256, base: poseRef.pose.source.base }
+    : { kind: "registered", preset_version: pose.source?.preset_version ?? null };
   manifest.render_environment = report.environment;
   report.browser_messages = messages;
   report.photo = photo ? path.basename(photo) : null;

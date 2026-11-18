@@ -72,6 +72,7 @@ def main():
             row.update(timing_s=rep['timing_s'], supersample=rep['supersample'], regions=rep.get('pass_regions'),
                        edge_alpha=rep.get('colour_region_edge_alpha'),
                        penetration=man['penetration_below_support'], penetration_body=man.get('penetration_body'),
+                       penetration_scene=man.get('penetration_scene'),
                        look_at=man['pose_report'].get('look_at'), notices=man['pose_report'].get('notices'),
                        legs=man['pose_report'].get('legs'), airborne=man['pose_report'].get('airborne'))
             if fcode == 0:

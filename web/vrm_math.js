@@ -12,7 +12,8 @@ export class ContractError extends Error {
 const finiteVector = (v, n) =>
   Array.isArray(v) && v.length === n && v.every((x) => typeof x === "number" && Number.isFinite(x));
 
-// poses: {pose_id: pose definition} from poses/*.json. Only registered pose_ids are accepted.
+// poses: {pose_id: pose definition} from poses/*.json, plus the pose loaded from pose_ref (render_vrm.mjs).
+// Only pose_ids in that map are accepted.
 export function validatePlacement(p, poses) {
   if (!poses) throw Error("validatePlacement needs the pose registry");
   for (const [k, v] of Object.entries({ coordinate_frame: "geometry_world", unit: "m" }))
@@ -51,6 +52,8 @@ export function validatePlacement(p, poses) {
     throw new ContractError("selection must be a nonempty string when provided");
   if (p.model_id !== undefined && p.model_id !== null && (typeof p.model_id !== "string" || !p.model_id))
     throw new ContractError("model_id must be a nonempty string when provided");
+  if (p.pose_ref !== undefined && p.pose_ref !== null && (typeof p.pose_ref !== "string" || !p.pose_ref))
+    throw new ContractError("pose_ref must be a nonempty relative path when provided");
   return {
     anchor_position: [...p.anchor_position],
     facing_rule: p.facing_rule,
@@ -61,6 +64,7 @@ export function validatePlacement(p, poses) {
     anchor_type: pose.anchor_type,
     support_candidate_id: sid ?? null,
     selection: p.selection ?? null,
+    pose_ref: p.pose_ref ?? null,
   };
 }
 
@@ -75,7 +79,35 @@ export function facing(p, t) {
   return [v[0] / n, 0, v[2] / n];
 }
 
+// geometry.v5 states its frame in coordinate_contract; older files do not have it (then R's
+// determinant below is the only handedness check).
+function checkCoordinateContract(s) {
+  const c = s.coordinate_contract;
+  if (c === undefined || c === null) return;
+  const want = { frame: "geometry_world", unit: "m", handedness: "left" };
+  for (const [k, v] of Object.entries(want))
+    if (c[k] !== v) throw new ContractError(`coordinate_contract.${k} must be ${JSON.stringify(v)}, got ${JSON.stringify(c[k])}`, "INVALID_GEOMETRY");
+  if (JSON.stringify(c.axes) !== JSON.stringify(["right", "up", "forward"]))
+    throw new ContractError(`coordinate_contract.axes must be [right, up, forward], got ${JSON.stringify(c.axes)}`, "INVALID_GEOMETRY");
+  if (c.image_size && (c.image_size[0] !== s.image.width || c.image_size[1] !== s.image.height))
+    throw new ContractError("coordinate_contract.image_size differs from image width/height", "INVALID_GEOMETRY");
+}
+
+// Render scale that reproduces the original photo's pixel grid (geometry.v5 image.original_size, or
+// the crop the geometry step took from it). The geometry image is the original resized uniformly.
+export function originalScale(s) {
+  const crop = s.camera_source?.crop_xywh;
+  const size = crop ? [crop[2], crop[3]] : s.image?.original_size;
+  if (!finiteVector(size, 2) || size.some((v) => v <= 0))
+    throw new ContractError("--render-scale original needs image.original_size (geometry.v5)", "INVALID_ARGUMENT");
+  const sx = size[0] / s.image.width, sy = size[1] / s.image.height;
+  if (Math.abs(sx - sy) > 1e-3 * Math.max(sx, sy))
+    throw new ContractError(`original ${size} is not a uniform scale of ${s.image.width}x${s.image.height}`, "INVALID_GEOMETRY");
+  return sx;
+}
+
 export function cameraFromSpatial(s) {
+  checkCoordinateContract(s);
   const { width, height } = s.image,
     k = s.camera,
     { R, t } = s.ground_plane.cam_to_world;

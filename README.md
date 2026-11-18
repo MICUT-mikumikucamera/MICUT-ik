@@ -47,7 +47,7 @@ uv run --no-project --with numpy --with pillow --with OpenEXR python tools/pose_
 uv run --no-project --with numpy --with pillow --with OpenEXR python tools/compare_renders.py outputs/a outputs/b
 ```
 
-조명: 사진에서 환경광을 만들고(Blender 경로와 같은 방식), 사진에 밝은 광원이 보이면 그 방향을, 아니면 위쪽 기본 방향을 키 라이트로 떼어 내 그림자를 만듭니다. 나머지 환경광은 하늘 방향 여러 개로 나눠 바닥의 부드러운 접지 그림자를 만듭니다(긴 변 512 화소 이하로 그려 키우므로 사진 크기와 관계없이 같은 모양). 그림자 맵은 포즈를 한 번 CPU로 스키닝한 정적 메시로 그립니다. 스프링본(머리카락·치마 물리)은 돌리지 않고 뼈 단위 정리만 합니다(지지면 위로, 트윈테일은 몸·팔·치마 밖으로). 몸끼리 겹친 정도는 manifest `penetration_body`에 남습니다. PM님 프리셋은 시선만 실제 카메라 쪽으로 다시 맞춥니다(자세한 규칙은 `docs/POSE_IK.md`). 다른 VRM으로 바꾸면 프로필의 뼈 이름·vertex group을 다시 확인해야 합니다.
+조명: 사진에서 환경광을 만들고(Blender 경로와 같은 방식), 사진에 밝은 광원이 보이면 그 방향을, 아니면 위쪽 기본 방향을 키 라이트로 떼어 내 그림자를 만듭니다. 나머지 환경광은 하늘 방향 여러 개로 나눠 바닥의 부드러운 접지 그림자를 만듭니다(긴 변 512 화소 이하로 그려 키우므로 사진 크기와 관계없이 같은 모양). 그림자 맵은 포즈를 한 번 CPU로 스키닝한 정적 메시로 그립니다. 스프링본(머리카락·치마 물리)은 돌리지 않고 뼈 단위 정리만 합니다(지지면 위로, 트윈테일은 몸·팔·치마 밖으로). 몸끼리 겹친 정도는 manifest `penetration_body`에 남습니다. PM님 프리셋은 [micut-presets](https://github.com/MICUT-mikumikucamera/micut-presets)에서 `node tools/import_presets.mjs`로 가져오고, 시선만 실제 카메라 쪽으로 다시 맞춥니다. 등록되지 않은 새 조합은 `placement.json`의 `pose_ref`로 받고, 의자에 앉는 조합은 다리만 실제 좌판 높이에 맞춥니다(자세한 규칙은 `docs/POSE_IK.md`). 다른 VRM으로 바꾸면 프로필의 뼈 이름·vertex group을 다시 확인해야 합니다.
 
 ### Blender 직접 렌더
 

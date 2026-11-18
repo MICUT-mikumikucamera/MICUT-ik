@@ -48,6 +48,8 @@ class Placement:
         for key, expected in {'coordinate_frame': 'geometry_world', 'unit': 'm'}.items():
             if data.get(key) != expected:
                 raise ContractError(f'{key}: this adapter supports only {expected!r}')
+        if data.get('pose_ref') is not None:
+            raise ContractError('pose_ref (generated preset-workshop pose) renders only with tools/render_vrm.mjs')
         pose = poses.get(data.get('pose_id'))
         if pose is None:
             raise ContractError(f"pose_id: unknown {data.get('pose_id')!r}; registered: {sorted(poses)}")
@@ -84,7 +86,24 @@ class Placement:
                    support_id, selection)
 
 
+def check_coordinate_contract(spatial):
+    """geometry.v5 states its frame in coordinate_contract; older files lack it (R's determinant is then
+    the only handedness check). Same rule as web/vrm_math.js."""
+    c = spatial.get('coordinate_contract')
+    if c is None:
+        return
+    for key, want in (('frame', 'geometry_world'), ('unit', 'm'), ('handedness', 'left')):
+        if c.get(key) != want:
+            raise ContractError(f'coordinate_contract.{key} must be {want!r}, got {c.get(key)!r}')
+    if c.get('axes') != ['right', 'up', 'forward']:
+        raise ContractError(f"coordinate_contract.axes must be ['right', 'up', 'forward'], got {c.get('axes')!r}")
+    size = c.get('image_size')
+    if size and list(size) != [spatial['image']['width'], spatial['image']['height']]:
+        raise ContractError('coordinate_contract.image_size differs from image width/height')
+
+
 def camera_contract(spatial):
+    check_coordinate_contract(spatial)
     im, k = spatial['image'], spatial['camera']
     w, h = im['width'], im['height']
     if any(isinstance(x, bool) or not isinstance(x, int) or x <= 0 for x in (w, h)):

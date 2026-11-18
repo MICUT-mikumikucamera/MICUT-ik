@@ -568,6 +568,8 @@ function vertexTable(rig) {
   return (rig._table = { group, cls, mesh, local });
 }
 
+export const vertexClass = (rig, i) => vertexTable(rig).cls[i];
+
 function contactPairs() {
   const legs = (s) => [`${s}_upper_leg`, `${s}_lower_leg`, `${s}_foot`];
   const arms = (s) => [`${s}_upper_arm`, `${s}_lower_arm`, `${s}_hand`];
@@ -689,6 +691,98 @@ export function bodyPenetration(rig, verts, tol, radius) {
   return out;
 }
 
+// Scene pass of the hair clean-up (photo obstacles, web/scene_field.js): a twin tail that hangs into the
+// chair back or another object is turned out of it. The depth map has no surface normals, so each
+// offending bone (root to tip) tries turns about its head (+-5..50 deg about the character's forward,
+// up and right axes) and scores every hair vertex it moves by its summed overlap: inside the photo
+// objects, inside the body (same test as clearHair) and below the support. It keeps the smallest turn
+// that clears at least 90% (sideways swings first, outward before inward, so tails go over the sides of
+// a chair back rather than up toward the camera or behind the back), else the best improvement.
+// Returns {turns, overlap_before_m, overlap_after_m} (summed overlap, metres).
+export function clearHairScene(rig, bones, support, scene, { radius, margin, tol, scale, passes = 3 }) {
+  const t = vertexTable(rig);
+  const field = contactField(rig, rig.vertices(), radius, ["hair"]);
+  const pair = field.pairs[0];
+  const pos = (i) => {
+    const m = rig.meshes[t.mesh[i]];
+    return m.getVertexPosition(t.local[i], new THREE.Vector3()).applyMatrix4(m.matrixWorld);
+  };
+  const overlap = (v) => {
+    const h = field.hit(pair, v);
+    return Math.max(scene(v).gap, h && h.depth > tol ? h.depth : 0, support(v) + margin - rig.height(v), 0);
+  };
+  const subtree = new Map(), own = new Map();
+  for (const name of bones) {
+    const names = new Set(chainBones(rig, [name]));
+    const idx = [], mine = [];
+    t.group.forEach((g, i) => {
+      if (t.cls[i] !== "hair") return;
+      if (names.has(g)) idx.push(i);
+      if (g === name) mine.push(i);
+    });
+    subtree.set(name, idx);
+    own.set(name, mine);
+  }
+  const cost = (idx) => idx.reduce((s, i) => {
+    const o = overlap(pos(i));
+    return o > tol ? s + o : s;
+  }, 0);
+  const all = [...new Set([...subtree.values()].flat())];
+  const before = cost(all);
+  const objects = {}; // which photo objects the hair started in (vertex counts)
+  for (const i of all) {
+    const r = scene(pos(i));
+    if (r.gap > tol) objects[r.id] = (objects[r.id] || 0) + 1;
+  }
+  let turns = 0;
+  const log = [];
+  // forward axis = sideways swing in the body plane (tails over the sides of a chair back), then
+  // twist about up, then pitch about right (toward or away from the camera).
+  const axes = [rig.forward, rig.up, rig.right];
+  const angles = [5, 10, 20, 35, 50].flatMap((a) => [rad(a), -rad(a)]);
+  // Lateral distance of a vertex set from the body's centre line: a turn that folds a tail inward (behind
+  // the back, out of sight) counts as 90 deg larger, so tails go over the sides of a chair back instead.
+  const hips = SIDES.map((sd) => rig.joint(`${sd}_upper_leg`));
+  const mid = hips[0].clone().add(hips[1]).multiplyScalar(0.5);
+  const lateral = (idx) => idx.reduce((sum, i) => sum + Math.abs(pos(i).sub(mid).dot(rig.right)), 0) / idx.length;
+  for (let p = 0; p < passes; p++) {
+    let changed = false;
+    for (const name of bones) {
+      // Bend where the tail meets the object: only a bone whose own vertices are inside turns (with
+      // everything below it), so the tail kinks at the contact instead of swinging from the root.
+      const idx = subtree.get(name);
+      if (!idx.length || cost(own.get(name)) <= tol) continue;
+      const now = cost(idx);
+      const bone = rig.bones.get(name);
+      const start = bone.quaternion.clone();
+      const tried = [];
+      const lat0 = lateral(idx);
+      axes.forEach((axis, rank) => {
+        for (const a of angles) {
+          bone.quaternion.copy(start);
+          rig.update();
+          const q = new THREE.Quaternion().setFromAxisAngle(axis, a);
+          rig.rotateAbout(name, q);
+          tried.push({ c: cost(idx), q, size: Math.abs(a) + (lateral(idx) < lat0 - 0.02 / scale ? rad(90) : 0), rank, a });
+        }
+      });
+      bone.quaternion.copy(start);
+      rig.update();
+      // Smallest turn that (nearly) clears the bone, sideways swings first; else the best improvement.
+      const enough = tried.filter((x) => x.c <= Math.max(now * 0.1, tol)).sort((x, y) => x.size - y.size || x.rank - y.rank);
+      const best = enough[0] ?? tried.reduce((x, y) => (y.c < x.c ? y : x), { c: now, q: null });
+      if (best.q && best.c < now * 0.9) {
+        rig.rotateAbout(name, best.q);
+        log.push({ bone: name, axis: ["forward", "up", "right"][best.rank], deg: Math.round(deg(best.a)), overlap_m: now * scale, after_m: best.c * scale });
+        turns++;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return { turns, overlap_before_m: before * scale, overlap_after_m: cost(all) * scale, scene_objects_before: objects, turns_log: log };
+}
+
 const hairClearOptions = (rig, scale) => ({
   radius: (rig.profile.hair_clear_radius_m ?? 0.06) / scale,
   margin: (rig.profile.settle_margin_m ?? 0.01) / scale,
@@ -742,8 +836,8 @@ export function clearHair(rig, bones, support, { radius, margin, tol, passes = 4
 
 // --- top level ---------------------------------------------------------------------------------
 // Returns {anchorSrc, report, support, planes}. cameraSrcOf(anchorSrc) -> camera position in rig space.
-export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf) {
-  if (pose.baked) return applyBaked(rig, pose, scale, cameraSrcOf);
+export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf, sceneOf = null) {
+  if (pose.baked) return applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf);
   rig.unitScale = scale;
   const report = { pose_id: pose.pose_id, steps: (pose.steps || []).length };
   applySteps(rig, pose.steps || []);
@@ -850,15 +944,18 @@ export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf) {
   const secondary = chainBones(rig, rig.profile.secondary_roots || []);
   report.settled_secondary_bones = settleChains(rig, secondary, support, (rig.profile.settle_margin_m ?? 0.01) / scale);
   report.hair_clear_turns = clearHair(rig, secondary, support, hairClearOptions(rig, scale));
+  if (sceneOf) report.hair_scene_clear = clearHairScene(rig, secondary, support, sceneOf(anchorSrc), { ...hairClearOptions(rig, scale), scale });
   return { anchorSrc, report, support, planes };
 }
 
-// Preset-workshop poses (poses/<ID>.json from tools/import_preset_poses.py): the workshop engine already
-// solved IK, coop sets, fingers and costume, so its final raw-bone transforms are applied as they are.
-// The workshop root transform (body yaw + sole offset) goes on vrm.scene, so rig space becomes the
-// workshop frame: floor y=0, character facing +Z. The placement root then turns +Z to the requested
-// facing, and body yaw stays relative to it. Anchor: below the feet centre on that floor.
-function applyBaked(rig, pose, scale, cameraSrcOf) {
+// Preset-workshop poses (poses/<ID>.json from tools/import_presets.mjs, or a pose_ref converted by
+// web/preset_pose.js): the workshop engine already solved IK, coop sets, fingers and costume, so its
+// final raw-bone transforms are applied as they are. The workshop root transform (body yaw + sole
+// offset) goes on vrm.scene, so rig space becomes the workshop frame: floor y=0, character facing +Z.
+// The placement root then turns +Z to the requested facing, and body yaw stays relative to it.
+// Anchor: standing, below the feet centre on that floor; seated, the pelvis seat contact, with the legs
+// re-fitted to the real seat height (seatBakedLegs).
+function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = null) {
   rig.unitScale = scale;
   const { root_transform: rt, raw_bones: bones, morphs } = pose.baked;
   for (const [name, p, q, s] of bones) {
@@ -885,9 +982,21 @@ function applyBaked(rig, pose, scale, cameraSrcOf) {
   const missing = Object.keys(morphs).filter((n) => !applied[n]);
   if (missing.length) throw new ContractError(`preset ${pose.pose_id}: model lacks morphs ${missing}`, "MODEL_MISMATCH");
   rig.update();
+  const seated = pose.action === "sit";
+  let anchorSrc, seat, support, planes;
+  if (seated) {
+    seat = seatBakedLegs(rig, pose, scale, supportHeightM, sceneOf);
+    anchorSrc = seat.contact;
+    support = seatSupport(rig, anchorSrc, seat.floor, rig.height(anchorSrc), scale);
+    planes = { floor_src: seat.floor, seat_src: rig.height(anchorSrc) };
+  } else {
+    const standing = footPoints(rig, rig.vertices());
+    anchorSrc = standing.left.clone().add(standing.right).multiplyScalar(0.5);
+    anchorSrc.y = 0; // workshop floor
+    support = () => 0;
+    planes = { floor_src: 0 };
+  }
   const feet = footPoints(rig, rig.vertices());
-  const anchorSrc = feet.left.clone().add(feet.right).multiplyScalar(0.5);
-  anchorSrc.y = 0; // workshop floor
   // Head and neck only: the feet (and so the anchor) do not move.
   const gaze = pose.source?.gaze;
   const lookAtReport =
@@ -895,10 +1004,11 @@ function applyBaked(rig, pose, scale, cameraSrcOf) {
       ? reaimGaze(rig, V(gaze.point), cameraSrcOf(anchorSrc), { contact_tol: 0.01 / scale, hand_tol: 0.002 / scale, ...rig.profile.preset_look_limits },
           () => deepestInside(rig, "arms_head", 0.04 / scale))
       : { mode: "preset_as_authored", target: gaze?.target ?? null };
-  const floor = () => 0;
   // The workshop leaves the twin tails at rest: keep that look, only turn them out of the body.
-  const hairTurns = clearHair(rig, chainBones(rig, rig.profile.secondary_roots || []), floor, hairClearOptions(rig, scale));
-  const soles = Object.fromEntries(SIDES.map((s) => [s, feet[s].y * scale]));
+  const hairBones = chainBones(rig, rig.profile.secondary_roots || []);
+  const hairTurns = clearHair(rig, hairBones, support, hairClearOptions(rig, scale));
+  const hairScene = sceneOf ? clearHairScene(rig, hairBones, support, sceneOf(anchorSrc), { ...hairClearOptions(rig, scale), scale }) : null;
+  const soles = Object.fromEntries(SIDES.map((s) => [s, (feet[s].y - planes.floor_src) * scale]));
   const report = {
     pose_id: pose.pose_id,
     baked: true,
@@ -909,11 +1019,209 @@ function applyBaked(rig, pose, scale, cameraSrcOf) {
     expressions: applied,
     look_at: lookAtReport,
     hair_clear_turns: hairTurns,
+    ...(hairScene ? { hair_scene_clear: hairScene } : {}),
   };
   report.airborne = Boolean(pose.source?.airborne);
-  if (!report.airborne) {
+  if (seated) {
+    report.legs = seat.legs;
+    report.seat_contact_vertices = seat.contactVertices;
+    report.seat = {
+      workshop_seat_height_m: pose.source?.seat?.workshop_seat_height_m ?? null,
+      seat_height_m: supportHeightM,
+      feet_on_floor_requested: seat.feetOnFloor,
+    };
+  } else if (!report.airborne) {
     // Standing presets must already stand on the workshop floor; report rather than move anything.
     report.legs = Object.fromEntries(SIDES.map((s) => [s, { reached: true, feet_on_floor: Math.abs(soles[s]) < 0.02 }]));
   }
-  return { anchorSrc, report, support: floor, planes: { floor_src: 0 } };
+  return { anchorSrc, report, support, planes };
+}
+
+// Floor everywhere, plus the seat plane inside +-seat_half_extent_m of the seat contact.
+function seatSupport(rig, centre, floor, seatH, scale) {
+  const half = (rig.profile.seat_half_extent_m ?? 0.25) / scale;
+  return (point) => {
+    const d = point.clone().sub(centre);
+    return Math.abs(d.dot(rig.right)) <= half && Math.abs(d.dot(rig.forward)) <= half ? Math.max(floor, seatH) : floor;
+  };
+}
+
+// Seated presets (chair bases) were posed on the workshop chair. The pelvis contact goes on the real
+// seat and the upper body, arms and authored foot orientation stay; only the legs move, in this order:
+//  1. the shin turns about the knee (in the leg plane) until the sole reaches the real floor: a lower
+//     seat swings the feet forward, the thighs (and hands resting on them) stay put;
+//  2. if a vertical shin is still too short (higher seat), the thigh tilts down about the hip, at most
+//     preset_max_thigh_drop_deg (15) and never deeper into the seat plane than authored (or 1.5 cm);
+//  3. what is left hangs: feet_on_floor=false.
+// Dangling-leg bases (source.seat.feet_on_floor false, e.g. a high seat) are only lifted out of the floor.
+function seatBakedLegs(rig, pose, scale, seatHeightM, sceneOf = null) {
+  const feetOnFloor = pose.source?.seat?.feet_on_floor ?? true;
+  const maxDrop = rad(rig.profile.preset_max_thigh_drop_deg ?? 15);
+  const tol = 0.002 / scale;
+  const t = vertexTable(rig);
+  const pos = (i) => {
+    const m = rig.meshes[t.mesh[i]];
+    return m.getVertexPosition(t.local[i], new THREE.Vector3()).applyMatrix4(m.matrixWorld);
+  };
+  const weighted = (groups, threshold) => {
+    const g = new Set(groups);
+    const out = [];
+    rig.weights.forEach((w, i) => {
+      let x = 0;
+      for (const [name, v] of Object.entries(w)) if (g.has(name)) x += v;
+      if (x >= threshold) out.push(i);
+    });
+    return out;
+  };
+  const soleIdx = Object.fromEntries(SIDES.map((s) => [s, weighted(rig.profile.foot_groups[s], rig.profile.feet_weight_threshold ?? 0.3)]));
+  const thighIdx = Object.fromEntries(SIDES.map((s) => [s, weighted(rig.profile.proxy_groups[`${s}_upper_leg`], 0.5)]));
+  const sole = (side) => Math.min(...soleIdx[side].map((i) => rig.height(pos(i))));
+  const pitch = (side) => {
+    const d = rig.joint(`${side}_lower_leg`).sub(rig.joint(`${side}_upper_leg`)).normalize();
+    return Math.asin(Math.max(-1, Math.min(1, -d.dot(rig.up))));
+  };
+
+  const verts = rig.vertices();
+  const [contact, contactVertices] = pelvisContact(rig, verts);
+  const seatH = rig.height(contact);
+  const floor = seatH - seatHeightM / scale;
+  const inSeat = seatSupport(rig, contact, -Infinity, seatH, scale);
+  const seatDepth = (side) => Math.max(0, ...thighIdx[side].map((i) => pos(i)).map((v) => inSeat(v) - rig.height(v)));
+
+  const legs = {};
+  for (const side of SIDES) {
+    const footQuat = rig.worldQuat(`${side}_foot`);
+    const pitch0 = pitch(side);
+    const allowedSeat = Math.max(seatDepth(side), 0.015 / scale);
+    const fwd0 = rig.joint(`${side}_foot`).dot(rig.forward);
+    const start = sole(side);
+    const need = start - floor; // + : sole above the real floor, - : inside it
+    const report = { reached: true, moved_m: 0, shin_turn_deg: 0, thigh_drop_deg: 0 };
+    legs[side] = report;
+    if ((feetOnFloor ? Math.abs(need) : -need) <= tol) continue;
+    const upper = rig.pb(`${side}_upper_leg`), lower = rig.pb(`${side}_lower_leg`);
+    const q0 = [upper.quaternion.clone(), lower.quaternion.clone()];
+    const legAxis = () => {
+      const hip = rig.joint(`${side}_upper_leg`), knee = rig.joint(`${side}_lower_leg`), ankle = rig.joint(`${side}_foot`);
+      const a = knee.clone().sub(hip).cross(ankle.clone().sub(knee));
+      return a.length() > 1e-6 ? a.normalize() : rig.right.clone();
+    };
+    const setLeg = (drop, turn) => {
+      upper.quaternion.copy(q0[0]);
+      lower.quaternion.copy(q0[1]);
+      rig.update();
+      const axis = legAxis();
+      if (drop) {
+        const knee = rig.joint(`${side}_lower_leg`).sub(rig.joint(`${side}_upper_leg`));
+        const pitchAxis = rig.up.clone().cross(knee); // positive angle tilts the thigh down
+        rig.rotateAbout(`${side}_upper_leg`, new THREE.Quaternion().setFromAxisAngle(
+          pitchAxis.length() > 1e-6 ? pitchAxis.normalize() : rig.right.clone(), drop));
+      }
+      if (turn) rig.rotateAbout(`${side}_lower_leg`, new THREE.Quaternion().setFromAxisAngle(axis, turn));
+      rig.setWorldQuat(`${side}_foot`, footQuat.clone());
+      return sole(side);
+    };
+    // Shin turn that puts the sole on the floor with the thigh at `drop`: scan, then bisect the crossing
+    // nearest to the authored shin. Raising a foot (lower seat) never tucks it back under the seat.
+    const shin = (drop) => {
+      const step = rad(3), samples = [];
+      for (let a = -rad(90); a <= rad(90) + 1e-9; a += step) samples.push([a, setLeg(drop, a) - floor]);
+      let best = null, lowest = samples[0];
+      for (let i = 0; i + 1 < samples.length; i++) {
+        if (samples[i][1] < lowest[1]) lowest = samples[i];
+        const [a0, h0] = samples[i], [a1, h1] = samples[i + 1];
+        if ((h0 > 0) === (h1 > 0)) continue;
+        let lo = a0, hi = a1;
+        for (let k = 0; k < 14; k++) {
+          const mid = (lo + hi) / 2;
+          if ((setLeg(drop, mid) - floor > 0) === (h0 > 0)) lo = mid;
+          else hi = mid;
+        }
+        const a = (lo + hi) / 2;
+        setLeg(drop, a);
+        const fwd = rig.joint(`${side}_foot`).dot(rig.forward);
+        if (need < 0 && fwd < fwd0 - 0.01 / scale) continue;
+        if (!best || Math.abs(a) < Math.abs(best.a)) best = { a, fwd };
+      }
+      if (samples[samples.length - 1][1] < lowest[1]) lowest = samples[samples.length - 1];
+      return best ? { turn: best.a, reached: true } : { turn: lowest[0], reached: false };
+    };
+    let drop = 0;
+    let r = feetOnFloor || need < 0 ? shin(0) : { turn: 0, reached: true };
+    if (!r.reached && need > 0) {
+      // Higher seat: tilt the thigh down while the seat plane allows, then hang.
+      const ok = (d) => {
+        const s = shin(d);
+        setLeg(d, s.turn);
+        return { s, fits: seatDepth(side) <= allowedSeat && pitch(side) - pitch0 <= maxDrop + 1e-6 };
+      };
+      let lo = 0, hi = maxDrop;
+      let best = { d: 0, s: r };
+      for (let k = 0; k < 10; k++) {
+        const mid = (lo + hi) / 2;
+        const { s, fits } = ok(mid);
+        if (!fits) hi = mid;
+        else if (s.reached) {
+          best = { d: mid, s }; // reaches: look for a smaller drop
+          hi = mid;
+        } else {
+          if (!best.s.reached) best = { d: mid, s }; // deepest drop that still fits
+          lo = mid;
+        }
+      }
+      drop = best.d;
+      r = best.s;
+    }
+    setLeg(drop, r.turn);
+    report.reached = r.reached;
+    report.shin_turn_deg = deg(r.turn);
+    report.thigh_drop_deg = deg(pitch(side) - pitch0);
+    report.moved_m = Math.abs(sole(side) - start) * scale;
+  }
+  // Photo obstacles (chair legs, the seat front): a shin or foot inside one swings forward about the knee,
+  // by the smallest turn (3..30 deg) that clears 90% of it without pushing the sole into the floor.
+  if (sceneOf) {
+    const scene = sceneOf(contact);
+    for (const side of SIDES) {
+      const idx = weighted([...rig.profile.proxy_groups[`${side}_lower_leg`], ...rig.profile.foot_groups[side]], 0.5);
+      const over = () => idx.reduce((sum, i) => {
+        const g = scene(pos(i)).gap;
+        return g > tol ? sum + g : sum;
+      }, 0);
+      const now = over();
+      legs[side].scene_overlap_before_m = now * scale;
+      if (now <= tol) continue;
+      const lower = rig.pb(`${side}_lower_leg`);
+      const q0 = lower.quaternion.clone();
+      const footQuat = rig.worldQuat(`${side}_foot`);
+      const hip = rig.joint(`${side}_upper_leg`), knee = rig.joint(`${side}_lower_leg`), ankle = rig.joint(`${side}_foot`);
+      let axis = knee.clone().sub(hip).cross(ankle.clone().sub(knee));
+      axis = axis.length() > 1e-6 ? axis.normalize() : rig.right.clone();
+      const fwd0 = ankle.dot(rig.forward);
+      const turn = (a) => {
+        lower.quaternion.copy(q0);
+        rig.update();
+        rig.rotateAbout(`${side}_lower_leg`, new THREE.Quaternion().setFromAxisAngle(axis, a));
+        rig.setWorldQuat(`${side}_foot`, footQuat.clone());
+      };
+      turn(rad(3));
+      const sign = rig.joint(`${side}_foot`).dot(rig.forward) >= fwd0 ? 1 : -1; // swing the foot forward
+      let best = { a: 0, c: now };
+      for (let d = 3; d <= 30; d += 3) {
+        turn(sign * rad(d));
+        if (sole(side) < floor - tol) break;
+        const c = over();
+        if (c < best.c) best = { a: sign * rad(d), c };
+        if (c <= Math.max(now * 0.1, tol)) break;
+      }
+      turn(best.a);
+      legs[side].scene_shin_turn_deg = deg(best.a);
+      legs[side].scene_overlap_after_m = best.c * scale;
+    }
+  }
+  for (const side of SIDES) {
+    legs[side].sole_gap_m = (sole(side) - floor) * scale;
+    legs[side].feet_on_floor = Math.abs(legs[side].sole_gap_m) < 0.02;
+  }
+  return { contact, contactVertices, floor, legs, feetOnFloor };
 }

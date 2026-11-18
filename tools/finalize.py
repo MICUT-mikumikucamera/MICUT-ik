@@ -67,6 +67,54 @@ def min_filter(a, r):
     return out
 
 
+def fill_invalid(depth, valid, iters=64):
+    """Give invalid depth pixels the mean of their valid 8-neighbours, growing inward from valid pixels
+    (nearest-valid fill for the thin edge bands and reflection blobs the geometry step flags). Pixels
+    still unreached after `iters` rounds stay NaN (treated as no occluder)."""
+    d = np.where(valid, depth, np.nan)
+    ok = valid.copy()
+    h, w = d.shape
+    for _ in range(iters):
+        if ok.all():
+            break
+        pad = np.pad(np.where(ok, d, 0.), 1)
+        cnt = np.pad(ok.astype(np.float64), 1)
+        acc = np.zeros_like(d)
+        n = np.zeros_like(d)
+        for dy in range(3):
+            for dx in range(3):
+                if dy == 1 and dx == 1:
+                    continue
+                acc += pad[dy:dy+h, dx:dx+w]
+                n += cnt[dy:dy+h, dx:dx+w]
+        grow = ~ok & (n > 0)
+        if not grow.any():
+            break
+        d[grow] = acc[grow]/n[grow]
+        ok |= grow
+    return d
+
+
+def scene_depth(gd, spatial, warnings):
+    """Geometry depth (planar camera z, metres) with the pixels the geometry step marks invalid in
+    depth_validity.png (edge flying points, below-floor reflections, missing values) refilled from their
+    valid neighbours, so a flying point in front of the character cannot hide it."""
+    depth = np.load(gd/'depth.npy').astype(np.float64)
+    valid = np.isfinite(depth) & (depth > 0)
+    info = spatial.get('depth_validity')
+    if info:
+        path = gd/info.get('file', 'depth_validity.png')
+        if not path.exists():
+            raise SystemExit(f'spatial_info.json lists {path.name} but the file is missing')
+        mask = np.asarray(Image.open(path).convert('L'))
+        if mask.shape != depth.shape:
+            raise SystemExit(f'{path.name} {mask.shape} does not match depth.npy {depth.shape}')
+        valid &= mask == info.get('valid_value', 255)
+    else:
+        warnings.append('DEPTH_VALIDITY_MISSING: geometry has no depth_validity.png; every depth pixel is trusted')
+    return fill_invalid(depth, valid), float(valid.mean())
+
+
 def read_passes(render_dir, report, w, h):
     """Linear premultiplied RGBA, planar camera depth, shadow ratio (H, W, 3) and the pixel box (x, y, w, h)
     of the frame they cover. Blender writes full-frame passes.exr. The VRM renderer (tools/render_vrm.mjs)
@@ -155,6 +203,8 @@ def main():
     p.add_argument('--job-id', default=None)
     p.add_argument('--attempt', type=int, default=1)
     p.add_argument('--depth-margin', type=float, default=.03)
+    p.add_argument('--trust-all-depth', action='store_true',
+                   help='check only: ignore depth_validity.png (use every finite depth pixel)')
     p.add_argument('--shadow-margin', type=float, default=.05)
     p.add_argument('--jpeg-quality', type=int, default=92)
     p.add_argument('--placement-repo', type=Path, help='cross-check occlusion against micut_place.compose (1x only)')
@@ -241,6 +291,12 @@ def compose(args, started):
     photo_path = args.photo or gd/'image.jpg'
     with Image.open(photo_path) as im:
         im = im.convert('RGB')
+        crop = (spatial.get('camera_source') or {}).get('crop_xywh')
+        original = (spatial.get('image') or {}).get('original_size')
+        if crop and original and list(im.size) == list(original):
+            # geometry.v5 cropped the upright original before resizing: take the same crop of the photo
+            x, y, cw, ch = crop
+            im = im.crop((x, y, x+cw, y+ch))
         if im.size != (w, h):
             if abs(im.size[0]/im.size[1]-w/h) > .01:
                 raise SystemExit(f'photo aspect {im.size} does not match render {w}x{h}')
@@ -251,9 +307,14 @@ def compose(args, started):
         photo = np.asarray(im, dtype=np.uint8)
     bg = to_linear(photo[by:by+bh, bx:bx+bw]/255)
 
-    depth = np.load(gd/'depth.npy').astype(np.float64)
-    valid = np.isfinite(depth) & (depth > 0)
-    depth_r = resize_bilinear(np.where(valid, depth, np.nan), w, h, box)
+    depth, depth_valid_ratio = scene_depth(gd, spatial, warnings)
+    if (spatial.get('depth') or {}).get('calibrated') is False:
+        warnings.append('DEPTH_UNCALIBRATED: geometry depth has no real-size reference; Miku (1.58 m) and the '
+                        'scene may not share a scale')
+    if args.trust_all_depth:  # check only: the old behaviour, every finite depth pixel trusted
+        depth = np.load(gd/'depth.npy').astype(np.float64)
+        depth = np.where(np.isfinite(depth) & (depth > 0), depth, np.nan)
+    depth_r = resize_bilinear(depth, w, h, box)
     photo_depth = np.where(np.isfinite(depth_r), depth_r, np.inf)
 
     # Soft edges and alpha-textured hair let the Z pass see the floor plane behind them; give those
@@ -322,6 +383,9 @@ def compose(args, started):
     pen = manifest.get('penetration_below_support', {}).get('vertices', {})
     if sum(pen.values()):
         warnings.append(f'PENETRATION: {pen}')
+    scene_pen = (manifest.get('penetration_scene') or {}).get('vertices') or {}
+    if sum(scene_pen.values()) >= 50:  # a few grazing vertices are depth noise, not a visible problem
+        warnings.append(f'SCENE_PENETRATION: {scene_pen} vertices inside photo objects (chair back, seat, legs)')
     pr = manifest.get('pose_report', {})
     result = {
         'schema': 'micut.result/0.1',
@@ -338,6 +402,8 @@ def compose(args, started):
                       'selection': manifest.get('selection') or 'unknown'},
         'quality': {'fully_in_frame': proj['fully_in_frame'], 'visible_vertex_fraction': proj.get('visible_vertex_fraction'),
                     'occluded_fraction': round(float(occluded.sum()/max(n_char, 1)), 4),
+                    'depth_valid_ratio': round(depth_valid_ratio, 4),
+                    'geometry_schema': spatial.get('schema_version'),
                     'feet_on_floor': all(v.get('feet_on_floor', True) for v in legs.values()),
                     'legs_reached': all(v.get('reached', True) for v in legs.values()),
                     'shadow_pixels': int(dark.sum()), 'warnings': warnings,
