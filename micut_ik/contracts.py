@@ -50,6 +50,8 @@ class Placement:
                 raise ContractError(f'{key}: this adapter supports only {expected!r}')
         if data.get('pose_ref') is not None:
             raise ContractError('pose_ref (generated preset-workshop pose) renders only with tools/render_vrm.mjs')
+        if data.get('combo') is not None:
+            raise ContractError('combo (preset-workshop pose) renders only with tools/render_vrm.mjs')
         pose = poses.get(data.get('pose_id'))
         if pose is None:
             raise ContractError(f"pose_id: unknown {data.get('pose_id')!r}; registered: {sorted(poses)}")

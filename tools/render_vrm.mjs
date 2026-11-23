@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import { ContractError, cameraFromSpatial, originalScale, validatePlacement } from "../web/vrm_math.js";
-import { loadPoseRef } from "./pose_ref.mjs";
+import { checkCombo, loadPoseRef } from "./pose_ref.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_ID = "appearance-miku-vrm1-local-v1";
@@ -48,13 +48,16 @@ const num = (name, min) => {
 // Scene obstacles for the pose clean-up (web/scene_field.js): the geometry step's depth, validity and
 // object masks next to spatial_info.json. Older geometry without them (or --scene off) renders without.
 function sceneFiles(spatial, dir, placement) {
-  if (args.scene === "off") return null;
+  if (args.scene === "off") return { reason: "--scene off" };
   const files = {
     "depth.npy": path.join(dir, "depth.npy"),
     "validity.png": path.join(dir, spatial.depth_validity?.file ?? "depth_validity.png"),
     "masks.png": path.join(dir, "masks.png"),
   };
-  if (!Object.values(files).every(existsSync) || !Array.isArray(spatial.objects)) return null;
+  const missing = Object.values(files).filter((f) => !existsSync(f)).map((f) => path.basename(f));
+  if (missing.length || !Array.isArray(spatial.objects))
+    return { reason: `geometry has no ${missing.length ? missing.join(", ") : "objects list"} next to spatial_info.json ` +
+      `(${spatial.schema_version ?? "pre-v5"} geometry); scene obstacles not checked` };
   const seat = (spatial.candidates?.seats || []).find((s) => s.id === placement?.support_candidate_id);
   return {
     files,
@@ -110,6 +113,7 @@ try {
   const rawPlacement = await readJson(args.placement);
   const poseRef = await loadPoseRef(rawPlacement, args.placement, poses);
   if (poseRef) poses[rawPlacement.pose_id] = poseRef.pose;
+  const comboCheck = checkCombo(rawPlacement, poses, poseRef);
   const placement = validatePlacement(rawPlacement, poses);
   const spatial = await readJson(args.spatial);
   const scene = sceneFiles(spatial, path.dirname(path.resolve(args.spatial)), rawPlacement);
@@ -136,7 +140,8 @@ try {
       sky_samples: Math.round(num("sky-samples", 1)),
       full_frame_regions: args.regions === "full", // check only: passes cover the whole frame
       dump_pose: args["dump-pose"] === "1", // check/dev only: write pose_dump.json (workshop format)
-      scene: scene?.spec ?? null,
+      scene: scene.spec ?? null,
+      scene_reason: scene.reason ?? null,
     },
   };
   const data = await fs.readFile(model);
@@ -187,7 +192,7 @@ try {
       let file;
       if (pathname === "/model.vrm") file = model;
       else if (pathname === "/photo.jpg" && photo) file = photo;
-      else if (pathname.startsWith("/scene/") && scene?.files[pathname.slice(7)]) file = scene.files[pathname.slice(7)];
+      else if (pathname.startsWith("/scene/") && scene.files?.[pathname.slice(7)]) file = scene.files[pathname.slice(7)];
       else if (pathname === "/") file = path.join(root, "web/vrm.html");
       else if (pathname.startsWith("/web/")) {
         file = path.resolve(root, "." + pathname);
@@ -252,7 +257,8 @@ try {
   manifest.source_file_sha256 = hash;
   manifest.pose_source = poseRef
     ? { kind: "pose_ref", file: poseRef.ref, sha256: poseRef.sha256, base: poseRef.pose.source.base }
-    : { kind: "registered", preset_version: pose.source?.preset_version ?? null };
+    : { kind: "registered", preset_version: pose.source?.preset_version ?? null, combo_sha256: pose.source?.combo_sha256 ?? null };
+  if (comboCheck) manifest.pose_source.placement_combo = comboCheck;
   manifest.render_environment = report.environment;
   report.browser_messages = messages;
   report.photo = photo ? path.basename(photo) : null;

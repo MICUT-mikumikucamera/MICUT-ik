@@ -41,3 +41,40 @@ export async function loadPoseRef(p, placementPath, poses) {
   return { pose, ref, sha256 };
 }
 
+
+// Combo hash: SHA-256 of the pose-defining part of a micut-pose-combo object. The production-only
+// keys (camera, reference) that the Pose step drops and the free-text meta are left out; the rest is
+// serialised as JSON with sorted keys and no whitespace. Registered presets carry the hash of their
+// micut-presets combos/<ID>.json (source.combo_sha256); a placement that sends a combo without a
+// pose_ref must match one of them.
+const COMBO_IGNORED = new Set(["camera", "reference", "meta"]);
+function canonical(v) {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object")
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(",")}}`;
+  return JSON.stringify(v);
+}
+export function comboSha256(combo) {
+  if (!combo || typeof combo !== "object" || Array.isArray(combo)) throw new ContractError("combo must be an object");
+  const kept = Object.fromEntries(Object.entries(combo).filter(([k]) => !COMBO_IGNORED.has(k)));
+  return createHash("sha256").update(canonical(kept), "utf8").digest("hex");
+}
+
+// placement.combo (the Pose candidate the placement step chose) against the pose that will be rendered.
+// With a pose_ref the baked file is the source of truth and the combo is only recorded. Without one the
+// pose_id must be a registered preset whose combo hash equals it; otherwise the registered pose is not
+// what Pose meant (e.g. a v0.6.0 combo under a v0.6.5 id), so it is an error.
+export function checkCombo(p, poses, poseRef) {
+  if (p?.combo === undefined || p.combo === null) return null;
+  const sha = comboSha256(p.combo);
+  if (poseRef) return { combo_sha256: sha, checked_against: "pose_ref" };
+  const pose = poses[p.pose_id];
+  const registered = pose?.source?.combo_sha256;
+  if (!registered)
+    throw new ContractError(`combo given without pose_ref and ${p.pose_id} is not a registered preset; ` +
+      "bake the combo with micut-presets tools/combo-to-pose and send its file as pose_ref");
+  if (registered !== sha)
+    throw new ContractError(`combo given without pose_ref does not match registered preset ${p.pose_id} ` +
+      `(combo ${sha.slice(0, 12)}, registered ${registered.slice(0, 12)}); send the baked combo as pose_ref`);
+  return { combo_sha256: sha, checked_against: "registered", match: true };
+}

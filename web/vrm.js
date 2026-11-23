@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { cameraFromSpatial, scaledCamera, facing, project, projectionReport, toLocal, LOCAL_FRAME_NOTE } from "./vrm_math.js";
-import { Rig, SIDES, applyPose, bodyPenetration, footPoints, capsules, penetration, restMeasure, vertexClass } from "./vrm_pose.js";
+import { Rig, SIDES, applyPose, bodyPenetration, footPoints, capsules, penetration, preserveCheck, restMeasure, vertexClass } from "./vrm_pose.js";
 import { loadScene } from "./scene_field.js";
 
 const arr = (v) => [v.x, v.y, v.z];
@@ -480,7 +480,8 @@ function scenePenetration(rig, verts, inside, tol, scale) {
     objects[id] = (objects[id] || 0) + 1;
     deepest = Math.max(deepest, gap);
   });
-  return { vertices: counts, deepest_m: deepest * scale, by_object_id: objects };
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  return { status: total >= 50 ? "fail" : "pass", vertices: counts, deepest_m: deepest * scale, by_object_id: objects };
 }
 
 function workshopDump(rig, meshes, planes, pose) {
@@ -582,7 +583,7 @@ async function main() {
     : null;
   if (sceneAt) mark("scene obstacles loaded");
 
-  const { anchorSrc, report: poseReport, support, planes } = applyPose(rig, pose, scale, rest, anchor[1], cameraSrcOf, sceneOf);
+  const { anchorSrc, report: poseReport, support, planes } = applyPose(rig, pose, scale, rest, anchor[1], cameraSrcOf, sceneOf, placement.preserve || []);
   // Check/dev option (--dump-pose 1): the posed rig in the preset-workshop export format (raw bones in the
   // workshop frame, floor y=0), so an own-engine pose can be fed back as a pose_ref or a preset.
   const poseDump = settings.dump_pose ? workshopDump(rig, meshes, planes, pose) : null;
@@ -591,7 +592,10 @@ async function main() {
   const proxies = capsules(rig, vertsSrc);
   const [penCounts, penDepth, penGroups] = penetration(rig, vertsSrc, support, 0.005 / scale);
   const bodyPen = bodyPenetration(rig, vertsSrc, 0.01 / scale, 0.04 / scale);
-  const scenePen = sceneOf ? scenePenetration(rig, vertsSrc, sceneOf(anchorSrc), 0.01 / scale, scale) : null;
+  const scenePen = sceneOf
+    ? scenePenetration(rig, vertsSrc, sceneOf(anchorSrc), 0.01 / scale, scale)
+    : { status: "not_run", reason: settings.scene_reason || "no scene obstacles" };
+  const preserveResult = preserveCheck(rig, placement.preserve);
   for (const v of Object.values(bodyPen)) v.deepest_m = v.deepest * scale, delete v.deepest;
   mark("contacts measured");
   const total = rootMatrix(anchorSrc);
@@ -650,10 +654,14 @@ async function main() {
       vertices: penCounts, deepest_m: penDepth * scale, by_group: penGroups,
       note: "support = floor, plus the seat plane inside +-seat_half_extent_m of the anchor for seated poses",
     },
-    penetration_scene: scenePen
-      ? { ...scenePen, note: "vertices behind a visible photo surface (geometry depth) by 1 cm..thickness: 0.30 m for the " +
-          "supporting object, 0.06 m for others; floor excluded. Not computed without geometry.v5 depth/masks" }
-      : null,
+    penetration_scene: scenePen.status === "not_run"
+      ? scenePen
+      : { ...scenePen, note: "vertices behind a visible photo surface (geometry depth) by 1 cm..thickness: 0.30 m for the " +
+          "supporting object, 0.06 m for others; floor excluded. status fail = 50 vertices or more" },
+    checks: {
+      preserve: preserveResult,
+      penetration_scene: { status: scenePen.status, ...(scenePen.reason ? { reason: scenePen.reason } : {}) },
+    },
     penetration_body: {
       ...bodyPen,
       note: "intruder vertices more than 1 cm inside the nearest host vertex (posed normal side, within 4 cm); " +

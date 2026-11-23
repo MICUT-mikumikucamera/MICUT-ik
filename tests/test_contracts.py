@@ -85,6 +85,8 @@ class ContractTests(unittest.TestCase):
     def test_pose_ref_is_vrm_only(self):
         with self.assertRaises(ContractError):
             Placement.parse({**self.request, 'pose_id': 'gen_c0', 'pose_ref': 'poses_runtime/gen_c0.json'})
+        with self.assertRaises(ContractError):
+            Placement.parse({**self.request, 'pose_id': 'COL_V', 'combo': {'base': {'id': 'B01'}}})
 
     def test_local_frame_matches_placement_repo(self):
         # x = character right r=[f_z,0,-f_x]; facing the camera (-Z) puts character right on world -X.

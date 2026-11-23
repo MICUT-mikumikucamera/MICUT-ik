@@ -78,7 +78,23 @@ node tools/import_presets.mjs --check    # 쓰지 않고 비교만. 다르면 �
 - `action`·`anchor_type`은 파일의 기본 자세에서 정해지는 값과 같아야 한다.
 - 거부 조건: 모델 SHA-256이 다르면 `MODEL_MISMATCH`, 형식이 틀리면 `INVALID_PLACEMENT`(`pose_ref:` 또는 `pose <id>:`로 시작하는 메시지). 형식이 틀린 경우는 쿼터니언이 단위가 아님, 값이 유한하지 않음, 뼈 중복, 모프 범위 밖, 지원하지 않는 기본 자세.
 - manifest `pose_source`에 `{kind: "pose_ref", file, sha256, base}`를 남긴다. 등록 포즈는 `{kind: "registered", preset_version}`.
-- Blender 경로(`contracts.py`)는 `pose_ref`를 거부한다.
+- Blender 경로(`contracts.py`)는 `pose_ref`와 `combo`를 거부한다.
+
+**`combo`(배치가 고른 포즈 후보의 조합, 2026-11-23)**: 포즈 단계(MICUT-human `pose_candidates.json`)의 후보 `combo`가 `placement.json`에 같이 올 수 있다.
+
+- 해시: `camera`·`reference`·`meta`를 뺀 combo를 키 정렬·공백 없는 JSON으로 만든 SHA-256(`tools/pose_ref.mjs`의 `comboSha256`). 포즈 단계는 combo에서 `camera`·`reference`만 빼고 `meta`에 `id`를 붙여 보내므로 셋을 뺀다.
+- 등록 프리셋은 가져올 때 micut-presets `combos/<ID>.json`의 해시를 `source.combo_sha256`에 남긴다.
+- `pose_ref`가 있으면 combo 해시를 기록만 한다(구운 파일이 기준).
+- `pose_ref`가 없으면 `pose_id`가 등록 프리셋이고 combo 해시가 그 프리셋 해시와 같아야 한다. 아니면 `INVALID_PLACEMENT`("combo를 micut-presets `tools/combo-to-pose`로 구워 `pose_ref`로 보내 달라"). 예: 포즈 단계 예시의 v0.6.0 `COL_V`(기본 자세 `B01`)는 v0.6.5 등록 `COL_V`(`B02`)와 달라 거부된다.
+- manifest `pose_source`에 등록 프리셋 해시(`combo_sha256`)와 받은 combo 판정(`placement_combo`)을 남긴다.
+
+**`preserve`(보정해도 바뀌면 안 되는 부위, 2026-11-23)**: 후보의 `preserve: [{side: left|right|both, part, gesture}]`를 받아, 보정이 끝난 뒤 그 부위가 그대로인지 manifest·`result.json`의 `checks.preserve`에 남긴다.
+
+- 부위 → 뼈: `fingers`(손가락), `hand`(손+손가락), `arm`·`coop`(팔 전체, `coop`은 양손 세트), `leg`·`legs`·`feet`(다리), `head`·`face`·`gaze`·`neck`(목·머리·눈).
+- 비교: 작업창 관절값을 얹은 직후와 모든 보정(시선, 머리카락, 앉기 다리, 장면 물체) 뒤, 가슴 기준 상대 변환이 0.5° 와 2 mm 안이면 `pass`, 넘으면 `fail`(`max_turn_deg`, `max_move_m` 기록). 부위를 모르거나 작업창 포즈가 아니면(우리 포즈 `stand_*`·`sit_default`) `not_run`과 이유.
+- 머리 계열 부위가 있으면 프리셋 시선 다시 맞추기를 하지 않는다(`look_at.mode = preset_as_authored`).
+- 지금 보정은 팔·손·손가락을 건드리지 않아 그 부위는 항상 `pass`다. 앉는 프리셋은 좌판 높이에 맞추느라 다리가 바뀌므로 `legs`를 지키라고 하면 `fail`이 난다(예: 0.45 m 의자 자세를 0.54 m 좌판에 앉히면 23°). `fail`이면 `result.json` 경고 `PRESERVE_FAILED`.
+- 전체 `status`: 하나라도 `fail`이면 `fail`, 아니면 `pass`가 하나라도 있으면 `pass`, 아니면 `not_run`.
 
 ## Blender에서 직접 포즈 잡기
 
@@ -134,7 +150,8 @@ node tools/import_presets.mjs --check    # 쓰지 않고 비교만. 다르면 �
 | `pose_report` | IK 결과: 다리·팔 도달 여부와 오차, 허벅지 각도, 발 바닥 접촉, 시선 잔여각, 표정, 정리된 머리카락·치마 뼈 수 |
 | `pose_source` | VRM 경로만. 등록 포즈(`registered`, 프리셋 버전) 또는 `pose_ref`(파일 경로·SHA-256·기본 자세) |
 | `penetration_below_support` | 바닥(앉기는 좌판 포함) 아래로 들어간 정점 수를 머리카락/치마/몸으로 나눔 |
-| `penetration_scene` | VRM 경로, geometry.v5만. 사진 물체(의자 등받이·좌판·다리 등)를 뚫은 정점 수(머리카락/앞머리/치마/몸), 최대 깊이, 물체 id별 수. 판정은 아래 "장면 물체" |
+| `penetration_scene` | VRM 경로. 사진 물체(의자 등받이·좌판·다리 등)를 뚫은 정점 수(머리카락/앞머리/치마/몸), 최대 깊이, 물체 id별 수, `status`(50개 이상 `fail`). 기하에 `depth.npy`·`depth_validity.png`·`masks.png`가 없거나 `--scene off`면 `{status: "not_run", reason}`. 판정은 아래 "장면 물체" |
+| `checks` | VRM 경로. `preserve`(위 "preserve")와 `penetration_scene`(상태·이유). `result.json`의 `quality.checks`로도 나간다 |
 | `penetration_body` | VRM 경로만. 몸끼리 1 cm 넘게 겹친 정점 수·최대 깊이·부위: 트윈테일↔몸·치마·팔(`hair`), 팔뚝·손↔몸·치마·반대 팔(`left_arm`·`right_arm`), 팔·손↔얼굴·앞머리(`arms_head`), 왼 정강이·발↔오른 다리(`legs`). 판정: 가장 가까운 상대 정점(4 cm 안)의 법선 안쪽 |
 
 `render_stand.py --export-shape`를 주면 `shape.npz`(성윤님 `export_stand_shape.py`와 같은 형식)를 같이 쓴다. 포즈 무관하게 깊이 합성에 쓸 수 있다.

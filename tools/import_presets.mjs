@@ -13,6 +13,7 @@ import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { presetFromWorkshop } from "../web/preset_pose.js";
+import { comboSha256 } from "./pose_ref.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = { "presets-repo": path.join(root, "..", "micut-presets") };
@@ -46,7 +47,11 @@ const data = JSON.parse(bytes.toString("utf8"));
 const wanted = new Map();
 for (const [id, entry] of Object.entries(data)) {
   if (entry.combo?.modelSha256 !== manifest.modelSha256) throw Error(`${id}: exported for another model`);
-  const pose = presetFromWorkshop(id, entry, { from: `micut-presets ${version}`, preset_version: version });
+  // The authored combo (combos/<ID>.json, what the Pose step sends) identifies the preset: its hash lets a
+  // placement that carries the combo be checked against this registered pose (tools/pose_ref.mjs).
+  const comboPath = path.join(repo, "combos", `${id}.json`);
+  const combo_sha256 = existsSync(comboPath) ? comboSha256(JSON.parse(readFileSync(comboPath, "utf8"))) : null;
+  const pose = presetFromWorkshop(id, entry, { from: `micut-presets ${version}`, preset_version: version, combo_sha256 });
   wanted.set(`${id}.json`, JSON.stringify(pose) + "\n");
 }
 const lock = {

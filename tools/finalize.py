@@ -384,6 +384,9 @@ def compose(args, started):
     if sum(pen.values()):
         warnings.append(f'PENETRATION: {pen}')
     scene_pen = (manifest.get('penetration_scene') or {}).get('vertices') or {}
+    for name, chk in (manifest.get('checks') or {}).items():
+        if chk.get('status') == 'fail' and name == 'preserve':
+            warnings.append('PRESERVE_FAILED: ' + ', '.join(f"{i['side']} {i['part']}" for i in chk['items'] if i['status'] == 'fail'))
     if sum(scene_pen.values()) >= 50:  # a few grazing vertices are depth noise, not a visible problem
         warnings.append(f'SCENE_PENETRATION: {scene_pen} vertices inside photo objects (chair back, seat, legs)')
     pr = manifest.get('pose_report', {})
@@ -408,7 +411,9 @@ def compose(args, started):
                     'legs_reached': all(v.get('reached', True) for v in legs.values()),
                     'shadow_pixels': int(dark.sum()), 'warnings': warnings,
                     'failure_policy': 'undecided: no automatic failure yet, warnings only',
-                    'occlusion_cross_check': agreement},
+                    'occlusion_cross_check': agreement,
+                    # IK-side checks (VRM renderer manifest): preserve = authored features kept after clean-up
+                    'checks': manifest.get('checks')},
         'timing_s': {'render': report.get('timing_s', {}).get('total', report.get('timing_s', {}).get('total_in_blender')),
                      'finalize': round(time.perf_counter()-started, 2)},
         'versions': {'renderer': report.get('renderer', 'blender-cycles'), 'model_id': manifest['model_id'], 'model_sha256': manifest.get('source_file_sha256'),

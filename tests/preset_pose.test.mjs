@@ -102,3 +102,42 @@ test("registered presets match presets.lock.json", async () => {
   }
   assert.deepEqual(baked.sort(), lock.poses);
 });
+
+test("combo hash ignores key order and production-only keys", async () => {
+  const { comboSha256 } = await import("../tools/pose_ref.mjs");
+  const a = { schema: "micut-pose-combo/0.6", base: { id: "B01", params: { footGap: 0.02 } }, arms: { right: { id: "A03" } } };
+  const b = { arms: { right: { id: "A03" } }, base: { params: { footGap: 0.02 }, id: "B01" }, schema: "micut-pose-combo/0.6",
+    camera: { view: "front" }, reference: { title: "x" }, meta: { id: "COL_V", name: "브이" } };
+  assert.equal(comboSha256(a), comboSha256(b));
+  assert.notEqual(comboSha256(a), comboSha256({ ...a, base: { id: "B02", params: {} } }));
+  assert.throws(() => comboSha256([1]), { name: "ContractError" });
+});
+
+test("a combo without pose_ref must match a registered preset", async () => {
+  const { comboSha256, checkCombo } = await import("../tools/pose_ref.mjs");
+  const combo = { schema: "micut-pose-combo/0.6", base: { id: "B01", params: {} } };
+  const poses = { COL_V: { pose_id: "COL_V", source: { combo_sha256: comboSha256(combo) } }, stand_default: { pose_id: "stand_default" } };
+  assert.equal(checkCombo({ pose_id: "COL_V" }, poses, null), null);
+  assert.deepEqual(checkCombo({ pose_id: "COL_V", combo }, poses, null), { combo_sha256: comboSha256(combo), checked_against: "registered", match: true });
+  assert.throws(() => checkCombo({ pose_id: "COL_V", combo: { ...combo, base: { id: "B02" } } }, poses, null), /does not match registered preset/);
+  assert.throws(() => checkCombo({ pose_id: "gen_c0", combo }, poses, null), /without pose_ref/);
+  assert.throws(() => checkCombo({ pose_id: "stand_default", combo }, poses, null), /without pose_ref/);
+  assert.equal(checkCombo({ pose_id: "gen_c0", combo }, poses, { pose: {} }).checked_against, "pose_ref");
+});
+
+test("registered presets carry the hash of their micut-presets combo", async () => {
+  const root = path.resolve(import.meta.dirname, "..");
+  for (const f of await readdir(path.join(root, "poses"))) {
+    const p = JSON.parse(await readFile(path.join(root, "poses", f), "utf8"));
+    if (p.baked) assert.match(p.source.combo_sha256 ?? "", /^[0-9a-f]{64}$/, p.pose_id);
+  }
+});
+
+test("preserve items are validated", () => {
+  const ok = validatePlacement({ ...stand, pose_id: "stand_default", preserve: [{ side: "left", part: "fingers", gesture: "peace" }] },
+    { stand_default: { pose_id: "stand_default", action: "stand", anchor_type: "feet_center_on_ground" } });
+  assert.deepEqual(ok.preserve, [{ side: "left", part: "fingers", gesture: "peace" }]);
+  for (const bad of [{ side: "up", part: "fingers" }, { side: "left" }, "x"])
+    assert.throws(() => validatePlacement({ ...stand, pose_id: "stand_default", preserve: [bad] },
+      { stand_default: { pose_id: "stand_default", action: "stand", anchor_type: "feet_center_on_ground" } }), { name: "ContractError" });
+});

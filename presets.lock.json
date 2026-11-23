@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/MICUT-mikumikucamera/micut-presets",
   "version": "0.6.5",
-  "commit": "63c9b31aaf098dedfeb094f38c5a310964ab2de2",
-  "baked_poses_sha256": "a3281d451f31ca4c5308e5ad84ca07bb60ecd0f06db880a809fa5f82c0aa5b9e",
+  "commit": "9bdd58290ddd0ea2044dadad78b92c9ba3850b7f",
+  "baked_poses_sha256": "964f5b076733cd6ca18fbd462c86a59f4939f9d406542f9430eaa8446498c803",
   "model_sha256": "d82699d2a913397d9761614c917a6305a6121f8654623c1197dcf3a13381a789",
   "poses": [
     "COL_ALIEN",

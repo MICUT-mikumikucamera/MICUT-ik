@@ -535,6 +535,66 @@ export function penetration(rig, verts, support, tol) {
   return [counts, deepest, top];
 }
 
+// --- checks.preserve ----------------------------------------------------------------------------------
+// The Pose step marks features the clean-up must not change (placement.preserve, e.g. {side: "left",
+// part: "fingers", gesture: "peace"} or {side: "both", part: "coop", gesture: "heart"}). Each part maps to
+// bones; their transforms relative to the chest are captured right after a workshop pose is applied and
+// compared once every clean-up (gaze, hair, seated legs, scene) has run. pass: every bone within
+// PRESERVE_DEG and PRESERVE_M; fail otherwise; not_run: unknown part, or not a workshop pose (no
+// authored reference). A head/face/gaze part also stops the preset gaze re-aim.
+const PRESERVE_DEG = 0.5, PRESERVE_M = 0.002;
+const HEAD_PARTS = new Set(["head", "face", "gaze", "neck"]);
+const FINGER_NAMES = ["thumb", "index", "middle", "ring", "little"];
+function partKeys(rig, side, part) {
+  const sides = side === "both" ? SIDES : [side];
+  const fingers = (s) => FINGER_NAMES.flatMap((f) => [1, 2, 3].map((i) => `${s}_${f}_${i}`));
+  const hand = (s) => [`${s}_hand`, ...fingers(s)];
+  const arm = (s) => [`${s}_upper_arm`, `${s}_lower_arm`, ...hand(s)];
+  const leg = (s) => [`${s}_upper_leg`, `${s}_lower_leg`, `${s}_foot`];
+  const by = {
+    fingers: (s) => fingers(s), finger: (s) => fingers(s), hand: hand, hands: hand, wrist: hand,
+    arm: arm, arms: arm, coop: arm, leg: leg, legs: leg, feet: leg, foot: leg,
+  };
+  if (HEAD_PARTS.has(part)) return ["neck", "head", "left_eye", "right_eye"].filter((k) => rig.has(k));
+  if (!by[part]) return null;
+  return sides.flatMap(by[part]).filter((k) => rig.has(k));
+}
+
+function relativeToChest(rig, key) {
+  const chest = rig.pb(rig.has("chest") ? "chest" : "hips").matrixWorld;
+  return new THREE.Matrix4().copy(chest).invert().multiply(rig.pb(key).matrixWorld);
+}
+
+export function captureParts(rig) {
+  const keys = new Set();
+  for (const part of ["arm", "head", "leg"]) for (const k of partKeys(rig, "both", part) || []) keys.add(k);
+  return new Map([...keys].map((k) => [k, relativeToChest(rig, k)]));
+}
+
+export function preserveCheck(rig, items) {
+  if (!items?.length) return { status: "not_run", reason: "placement has no preserve items", items: [] };
+  const out = items.map((item) => {
+    const base = { side: item.side, part: item.part, gesture: item.gesture ?? null };
+    const keys = partKeys(rig, item.side, item.part);
+    if (!keys) return { ...base, status: "not_run", reason: `unknown part ${item.part}` };
+    if (!rig.authored) return { ...base, status: "not_run", reason: "not a workshop pose: no authored reference" };
+    let deg = 0, move = 0;
+    for (const k of keys) {
+      const a = rig.authored.get(k), b = relativeToChest(rig, k);
+      if (!a) continue;
+      const pa = new THREE.Vector3(), qa = new THREE.Quaternion(), pb = new THREE.Vector3(), qb = new THREE.Quaternion(), s = new THREE.Vector3();
+      a.decompose(pa, qa, s);
+      b.decompose(pb, qb, s);
+      deg = Math.max(deg, (qa.angleTo(qb) * 180) / Math.PI);
+      move = Math.max(move, pa.distanceTo(pb) * rig.unitScale);
+    }
+    const ok = deg <= PRESERVE_DEG && move <= PRESERVE_M;
+    return { ...base, status: ok ? "pass" : "fail", bones: keys.length, max_turn_deg: deg, max_move_m: move };
+  });
+  const status = out.some((x) => x.status === "fail") ? "fail" : out.some((x) => x.status === "pass") ? "pass" : "not_run";
+  return { status, tolerance: { turn_deg: PRESERVE_DEG, move_m: PRESERVE_M, frame: "relative to the chest" }, items: out };
+}
+
 // --- body self-penetration -----------------------------------------------------------------------
 // Each vertex gets a class from its dominant vertex group: "hair"/"skirt" (secondary_categories; hair
 // outside the secondary chains is "head_hair"), "neck", "shoulder", a proxy segment ("torso",
@@ -836,8 +896,8 @@ export function clearHair(rig, bones, support, { radius, margin, tol, passes = 4
 
 // --- top level ---------------------------------------------------------------------------------
 // Returns {anchorSrc, report, support, planes}. cameraSrcOf(anchorSrc) -> camera position in rig space.
-export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf, sceneOf = null) {
-  if (pose.baked) return applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf);
+export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf, sceneOf = null, preserve = []) {
+  if (pose.baked) return applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf, preserve);
   rig.unitScale = scale;
   const report = { pose_id: pose.pose_id, steps: (pose.steps || []).length };
   applySteps(rig, pose.steps || []);
@@ -955,7 +1015,7 @@ export function applyPose(rig, pose, scale, rest, supportHeightM, cameraSrcOf, s
 // The placement root then turns +Z to the requested facing, and body yaw stays relative to it.
 // Anchor: standing, below the feet centre on that floor; seated, the pelvis seat contact, with the legs
 // re-fitted to the real seat height (seatBakedLegs).
-function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = null) {
+function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = null, preserve = []) {
   rig.unitScale = scale;
   const { root_transform: rt, raw_bones: bones, morphs } = pose.baked;
   for (const [name, p, q, s] of bones) {
@@ -982,6 +1042,7 @@ function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = nul
   const missing = Object.keys(morphs).filter((n) => !applied[n]);
   if (missing.length) throw new ContractError(`preset ${pose.pose_id}: model lacks morphs ${missing}`, "MODEL_MISMATCH");
   rig.update();
+  rig.authored = captureParts(rig); // the pose as authored, before any clean-up (checks.preserve)
   const seated = pose.action === "sit";
   let anchorSrc, seat, support, planes;
   if (seated) {
@@ -999,8 +1060,10 @@ function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = nul
   const feet = footPoints(rig, rig.vertices());
   // Head and neck only: the feet (and so the anchor) do not move.
   const gaze = pose.source?.gaze;
-  const lookAtReport =
-    gaze?.target === "camera" && gaze.point
+  const keepHead = preserve.some((x) => HEAD_PARTS.has(x.part));
+  const lookAtReport = keepHead
+    ? { mode: "preset_as_authored", reason: "placement preserve keeps the head" }
+    : gaze?.target === "camera" && gaze.point
       ? reaimGaze(rig, V(gaze.point), cameraSrcOf(anchorSrc), { contact_tol: 0.01 / scale, hand_tol: 0.002 / scale, ...rig.profile.preset_look_limits },
           () => deepestInside(rig, "arms_head", 0.04 / scale))
       : { mode: "preset_as_authored", target: gaze?.target ?? null };

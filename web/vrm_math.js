@@ -54,6 +54,10 @@ export function validatePlacement(p, poses) {
     throw new ContractError("model_id must be a nonempty string when provided");
   if (p.pose_ref !== undefined && p.pose_ref !== null && (typeof p.pose_ref !== "string" || !p.pose_ref))
     throw new ContractError("pose_ref must be a nonempty relative path when provided");
+  const preserve = p.preserve ?? [];
+  if (!Array.isArray(preserve) || preserve.some((x) => !x || typeof x !== "object" || typeof x.part !== "string" ||
+      !["left", "right", "both"].includes(x.side)))
+    throw new ContractError("preserve must be a list of {side: left|right|both, part, gesture}");
   return {
     anchor_position: [...p.anchor_position],
     facing_rule: p.facing_rule,
@@ -65,6 +69,7 @@ export function validatePlacement(p, poses) {
     support_candidate_id: sid ?? null,
     selection: p.selection ?? null,
     pose_ref: p.pose_ref ?? null,
+    preserve,
   };
 }
 
