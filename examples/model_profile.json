@@ -1,15 +1,352 @@
 {
   "model_id": "legend-pretty-miku-local-v1",
   "target_height_m": 1.58,
-  "target_height_note": "Integration test setting, not a finalized character height or a measured source unit claim.",
+  "target_height_note": "Team decision 2026-10-31: 1.58 m measured from shoe sole to top of hair in the rest pose.",
   "source_up_axis": "+Z",
   "source_forward_axis": "-Y",
   "armature_name": "Armature",
-  "mesh_names": ["Appearance Miku_BDEF_mod-v04_mesh"],
-  "pose_id": "stand_default",
-  "arm_bones": {"left": "Arm_L", "right": "Arm_R"},
-  "arm_lowering_degrees": 75,
-  "foot_groups": {"left": ["Ankle_L", "AnkleTip_L"], "right": ["Ankle_R", "AnkleTip_R"]},
-  "ankle_bones": {"left": "Ankle_L", "right": "Ankle_R"},
-  "feet_weight_threshold": 0.25
+  "mesh_names": [
+    "Appearance Miku_BDEF_mod-v04_mesh"
+  ],
+  "foot_groups": {
+    "left": [
+      "Ankle_L",
+      "AnkleTip_L"
+    ],
+    "right": [
+      "Ankle_R",
+      "AnkleTip_R"
+    ]
+  },
+  "ankle_bones": {
+    "left": "Ankle_L",
+    "right": "Ankle_R"
+  },
+  "feet_weight_threshold": 0.25,
+  "humanoid": {
+    "root": "Waist",
+    "hips": "LowerBody",
+    "spine": "UpperBody",
+    "chest": "UpperBody2",
+    "neck": "Neck",
+    "head": "Head",
+    "left_eye": "Eye_L",
+    "left_upper_leg": "Leg_L",
+    "left_lower_leg": "Knee_L",
+    "left_foot": "Ankle_L",
+    "left_toes": "AnkleTip_L",
+    "left_shoulder": "Shoulder_L",
+    "left_upper_arm": "Arm_L",
+    "left_lower_arm": "Elbow_L",
+    "left_hand": "Wrist_L",
+    "right_eye": "Eye_R",
+    "right_upper_leg": "Leg_R",
+    "right_lower_leg": "Knee_R",
+    "right_foot": "Ankle_R",
+    "right_toes": "AnkleTip_R",
+    "right_shoulder": "Shoulder_R",
+    "right_upper_arm": "Arm_R",
+    "right_lower_arm": "Elbow_R",
+    "right_hand": "Wrist_R"
+  },
+  "rest_palm_normal": [
+    0,
+    -1,
+    0
+  ],
+  "fingers": {
+    "left": [
+      [
+        "Thumb0_L",
+        "Thumb1_L",
+        "Thumb2_L"
+      ],
+      [
+        "IndexFinger1_L",
+        "IndexFinger2_L",
+        "IndexFinger3_L"
+      ],
+      [
+        "MiddleFinger1_L",
+        "MiddleFinger2_L",
+        "MiddleFinger3_L"
+      ],
+      [
+        "RingFinger1_L",
+        "RingFinger2_L",
+        "RingFinger3_L"
+      ],
+      [
+        "LittleFinger1_L",
+        "LittleFinger2_L",
+        "LittleFinger3_L"
+      ]
+    ],
+    "right": [
+      [
+        "Thumb0_R",
+        "Thumb1_R",
+        "Thumb2_R"
+      ],
+      [
+        "IndexFinger1_R",
+        "IndexFinger2_R",
+        "IndexFinger3_R"
+      ],
+      [
+        "MiddleFinger1_R",
+        "MiddleFinger2_R",
+        "MiddleFinger3_R"
+      ],
+      [
+        "RingFinger1_R",
+        "RingFinger2_R",
+        "RingFinger3_R"
+      ],
+      [
+        "LittleFinger1_R",
+        "LittleFinger2_R",
+        "LittleFinger3_R"
+      ]
+    ]
+  },
+  "seat_contact_groups": [
+    "LowerBody",
+    "Leg_L",
+    "Leg_R",
+    "Waist_L",
+    "Waist_R"
+  ],
+  "seat_contact_band": [
+    -0.14,
+    0.05
+  ],
+  "proxy_segments": {
+    "torso": {
+      "from": [
+        "left_upper_leg",
+        "right_upper_leg"
+      ],
+      "to": [
+        "neck"
+      ]
+    },
+    "head": {
+      "from": [
+        "head"
+      ],
+      "to": "@tail"
+    },
+    "left_upper_arm": {
+      "from": [
+        "left_upper_arm"
+      ],
+      "to": [
+        "left_lower_arm"
+      ]
+    },
+    "left_lower_arm": {
+      "from": [
+        "left_lower_arm"
+      ],
+      "to": [
+        "left_hand"
+      ]
+    },
+    "left_hand": {
+      "from": [
+        "left_hand"
+      ],
+      "to": "@tail"
+    },
+    "left_upper_leg": {
+      "from": [
+        "left_upper_leg"
+      ],
+      "to": [
+        "left_lower_leg"
+      ]
+    },
+    "left_lower_leg": {
+      "from": [
+        "left_lower_leg"
+      ],
+      "to": [
+        "left_foot"
+      ]
+    },
+    "left_foot": {
+      "from": [
+        "left_foot"
+      ],
+      "to": [
+        "left_toes"
+      ]
+    },
+    "right_upper_arm": {
+      "from": [
+        "right_upper_arm"
+      ],
+      "to": [
+        "right_lower_arm"
+      ]
+    },
+    "right_lower_arm": {
+      "from": [
+        "right_lower_arm"
+      ],
+      "to": [
+        "right_hand"
+      ]
+    },
+    "right_hand": {
+      "from": [
+        "right_hand"
+      ],
+      "to": "@tail"
+    },
+    "right_upper_leg": {
+      "from": [
+        "right_upper_leg"
+      ],
+      "to": [
+        "right_lower_leg"
+      ]
+    },
+    "right_lower_leg": {
+      "from": [
+        "right_lower_leg"
+      ],
+      "to": [
+        "right_foot"
+      ]
+    },
+    "right_foot": {
+      "from": [
+        "right_foot"
+      ],
+      "to": [
+        "right_toes"
+      ]
+    }
+  },
+  "proxy_groups": {
+    "torso": [
+      "LowerBody",
+      "UpperBody",
+      "UpperBody2",
+      "Waist_L",
+      "Waist_R",
+      "Clavicle_L",
+      "Clavicle_R"
+    ],
+    "head": [
+      "Head",
+      "Neck"
+    ],
+    "left_upper_arm": [
+      "Arm_L",
+      "ArmTwist_L",
+      "Shoulder_L"
+    ],
+    "left_lower_arm": [
+      "Elbow_L",
+      "HandTwist_L"
+    ],
+    "left_hand": [
+      "Wrist_L"
+    ],
+    "left_upper_leg": [
+      "Leg_L"
+    ],
+    "left_lower_leg": [
+      "Knee_L"
+    ],
+    "left_foot": [
+      "Ankle_L",
+      "AnkleTip_L"
+    ],
+    "right_upper_arm": [
+      "Arm_R",
+      "ArmTwist_R",
+      "Shoulder_R"
+    ],
+    "right_lower_arm": [
+      "Elbow_R",
+      "HandTwist_R"
+    ],
+    "right_hand": [
+      "Wrist_R"
+    ],
+    "right_upper_leg": [
+      "Leg_R"
+    ],
+    "right_lower_leg": [
+      "Knee_R"
+    ],
+    "right_foot": [
+      "Ankle_R",
+      "AnkleTip_R"
+    ]
+  },
+  "skirt": {
+    "front": {
+      "left": [
+        "FrontSkirt_L",
+        "S_5_1"
+      ],
+      "right": [
+        "FrontSkirt_R",
+        "S_4_1"
+      ]
+    },
+    "side": {
+      "left": [
+        "SideSkirt_L",
+        "S_0_1"
+      ],
+      "right": [
+        "SideSkirt_R",
+        "S_3_1"
+      ]
+    },
+    "back": {
+      "left": [
+        "BackSkirt_L",
+        "S_1_1"
+      ],
+      "right": [
+        "BackSkirt_R",
+        "S_2_1"
+      ]
+    }
+  },
+  "secondary_roots": [
+    "Twintail1_L",
+    "Twintail1_R",
+    "BackSkirt_L",
+    "BackSkirt_R",
+    "SideSkirt_L",
+    "SideSkirt_R",
+    "FrontSkirt_L",
+    "FrontSkirt_R"
+  ],
+  "secondary_categories": {
+    "hair": [
+      "Twintail",
+      "Hair"
+    ],
+    "skirt": [
+      "Skirt",
+      "S_"
+    ]
+  },
+  "seat_half_extent_m": 0.25,
+  "settle_margin_m": 0.01,
+  "expressions": {
+    "smile": "にこり",
+    "smile_eyes": "笑い",
+    "blink": "まばたき",
+    "mouth_a": "あ"
+  }
 }

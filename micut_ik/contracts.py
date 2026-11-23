@@ -1,10 +1,25 @@
-"""Small validated contract for a standing placement, without a rendering dependency."""
+"""Small validated placement contract (stand / sit), without a rendering dependency."""
 from dataclasses import dataclass
+import json
 import math
+from pathlib import Path
+
+POSE_DIR = Path(__file__).resolve().parents[1]/'poses'
 
 
 class ContractError(ValueError):
-    pass
+    def __init__(self, message, code='INVALID_PLACEMENT'):
+        super().__init__(message)
+        self.code = code
+
+
+def pose_registry(pose_dir=POSE_DIR):
+    """pose_id -> pose definition, from poses/*.json. The renderer accepts only registered poses."""
+    poses = {}
+    for path in sorted(Path(pose_dir).glob('*.json')):
+        pose = json.loads(path.read_text(encoding='utf-8'))
+        poses[pose['pose_id']] = pose
+    return poses
 
 
 def vector(value, n, name):
@@ -21,18 +36,40 @@ class Placement:
     facing_rule: str
     facing_direction: tuple | None
     model_id: str | None
+    action: str = 'stand'
+    pose_id: str = 'stand_default'
+    anchor_type: str = 'feet_center_on_ground'
+    support_candidate_id: int | None = None
+    selection: str | None = None  # how the placement side chose this spot (rule / jev / manual); passed through
 
     @classmethod
-    def parse(cls, data):
-        required = {'coordinate_frame': 'geometry_world', 'unit': 'm',
-                    'anchor_type': 'feet_center_on_ground', 'action': 'stand',
-                    'pose_id': 'stand_default'}
-        for key, expected in required.items():
+    def parse(cls, data, poses=None):
+        poses = pose_registry() if poses is None else poses
+        for key, expected in {'coordinate_frame': 'geometry_world', 'unit': 'm'}.items():
             if data.get(key) != expected:
                 raise ContractError(f'{key}: this adapter supports only {expected!r}')
+        if data.get('pose_ref') is not None:
+            raise ContractError('pose_ref (generated preset-workshop pose) renders only with tools/render_vrm.mjs')
+        if data.get('combo') is not None:
+            raise ContractError('combo (preset-workshop pose) renders only with tools/render_vrm.mjs')
+        pose = poses.get(data.get('pose_id'))
+        if pose is None:
+            raise ContractError(f"pose_id: unknown {data.get('pose_id')!r}; registered: {sorted(poses)}")
+        for key in ('action', 'anchor_type'):
+            if data.get(key) != pose[key]:
+                raise ContractError(f"{key}: pose {pose['pose_id']!r} requires {pose[key]!r}")
         anchor = vector(data.get('anchor_position'), 3, 'anchor_position')
-        if abs(anchor[1]) > 1e-5:
-            raise ContractError('standing ground anchor must have Y=0; elevated supports are not implemented')
+        if pose['anchor_type'] == 'feet_center_on_ground':
+            if abs(anchor[1]) > 1e-5:
+                raise ContractError('standing ground anchor must have Y=0; use a sit pose for elevated supports')
+        else:
+            lo, hi = pose['support_height_m']
+            if not lo <= anchor[1] <= hi:
+                raise ContractError(f'support height Y={anchor[1]:.3f} m outside {pose["pose_id"]} range [{lo}, {hi}]',
+                                    'SUPPORT_OUT_OF_RANGE')
+        support_id = data.get('support_candidate_id')
+        if support_id is not None and (isinstance(support_id, bool) or not isinstance(support_id, int) or support_id < 0):
+            raise ContractError('support_candidate_id must be a non-negative integer when provided')
         rule = data.get('facing_rule')
         if rule not in ('look_at_camera', 'world_direction'):
             raise ContractError('facing_rule: use look_at_camera or world_direction')
@@ -41,13 +78,34 @@ class Placement:
             direction = vector(data.get('facing_direction'), 3, 'facing_direction')
             if abs(direction[1]) > 1e-5 or math.hypot(direction[0], direction[2]) < 1e-8:
                 raise ContractError('facing_direction must be nonzero and horizontal (Y=0)')
+        selection = data.get('selection')
+        if selection is not None and (not isinstance(selection, str) or not selection):
+            raise ContractError('selection must be a nonempty string when provided')
         model_id = data.get('model_id')
         if model_id is not None and (not isinstance(model_id, str) or not model_id):
             raise ContractError('model_id must be a nonempty string when provided')
-        return cls(anchor, rule, direction, model_id)
+        return cls(anchor, rule, direction, model_id, pose['action'], pose['pose_id'], pose['anchor_type'],
+                   support_id, selection)
+
+
+def check_coordinate_contract(spatial):
+    """geometry.v5 states its frame in coordinate_contract; older files lack it (R's determinant is then
+    the only handedness check). Same rule as web/vrm_math.js."""
+    c = spatial.get('coordinate_contract')
+    if c is None:
+        return
+    for key, want in (('frame', 'geometry_world'), ('unit', 'm'), ('handedness', 'left')):
+        if c.get(key) != want:
+            raise ContractError(f'coordinate_contract.{key} must be {want!r}, got {c.get(key)!r}')
+    if c.get('axes') != ['right', 'up', 'forward']:
+        raise ContractError(f"coordinate_contract.axes must be ['right', 'up', 'forward'], got {c.get('axes')!r}")
+    size = c.get('image_size')
+    if size and list(size) != [spatial['image']['width'], spatial['image']['height']]:
+        raise ContractError('coordinate_contract.image_size differs from image width/height')
 
 
 def camera_contract(spatial):
+    check_coordinate_contract(spatial)
     im, k = spatial['image'], spatial['camera']
     w, h = im['width'], im['height']
     if any(isinstance(x, bool) or not isinstance(x, int) or x <= 0 for x in (w, h)):
@@ -89,6 +147,18 @@ def project_world(point, camera):
         return None
     return (camera['fx']*cv[0]/cv[2]+camera['cx'],
             camera['fy']*cv[1]/cv[2]+camera['cy'], cv[2])
+
+
+LOCAL_FRAME_NOTE = ('model-local metres: x = character right r=[f_z,0,-f_x], y = up, z = facing f; '
+                    'origin = anchor_position (the anchor_type point). Same frame as the placement shape export.')
+
+
+def to_local(point, anchor, facing):
+    """Geometry-world point -> model-local frame shared with the placement repo (micut_place.shape)."""
+    f = facing
+    r = (f[2], 0., -f[0])
+    d = [point[i]-anchor[i] for i in range(3)]
+    return (d[0]*r[0]+d[2]*r[2], d[1], d[0]*f[0]+d[2]*f[2])
 
 
 def horizontal_facing(placement, camera_position):

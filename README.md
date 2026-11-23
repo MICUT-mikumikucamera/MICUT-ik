@@ -11,7 +11,7 @@
 - 기하 좌표를 Blender 좌표로 변환하고 K/R/t로 카메라 설정
 - 투명 PNG, 모델 크기/기준점 manifest, 화면 잘림 검사 보고서 출력
 
-**두 렌더 경로를 지원합니다: Blender Cycles CPU와 VRM 직접 로딩(three.js + three-vrm).** 제품의 최종 렌더 엔진을 확정한 것은 아닙니다. 새로 제공된 `3000533088641481097 (1).vrm`은 실제 캐릭터를 포함한 VRM 1.0이며 브라우저에서 직접 렌더를 검증했습니다. 처음 제공된 17KB VRM(Cube)은 다른 파일입니다.
+**두 렌더 경로를 지원합니다: Blender Cycles CPU와 VRM 직접 로딩(three.js + three-vrm).** 제품의 최종 렌더 엔진을 확정한 것은 아닙니다. VRM 모델은 `local/models/miku.vrm`(VRM 1.0, SHA-256 `d82699d2…a789`, 처음 받은 `3000533088641481097 (1).vrm`과 같은 파일)에 둡니다. 처음 제공된 17KB VRM(Cube)은 다른 파일입니다.
 
 앉기, 사람 포즈 리타게팅, 새로운 접촉 IK, 환경 충돌 해결, 깊이 기반 가림, 조명 추정은 다음 작업입니다. 기본 서기에서는 기존 리그 위에 팔을 내리는 고정 프리셋만 적용합니다.
 
@@ -23,14 +23,31 @@ Node.js 22 이상과 Chrome/Edge 또는 Playwright Chromium이 필요합니다.
 
 ```powershell
 npm ci
-node tools/render_vrm.mjs --model 'C:\path\3000533088641481097 (1).vrm' --spatial examples/spatial.synthetic.json --placement examples/placement.preview.json --out outputs/vrm-preview
+# 미리보기 (조명 고정, 패스 없음)
+node tools/render_vrm.mjs --spatial examples/spatial.synthetic.json --placement examples/placement.preview.json --out outputs/vrm-preview
+# 사진 합성용: 사진 조명 추정 + 그림자 + 합성 패스, 이어서 final.jpg
+node tools/render_vrm.mjs --spatial local/geometry/sample1/spatial_info.json --placement examples/placement.sample1.stand.json `
+  --photo local/geometry/sample1/image.jpg --out outputs/vrm-s1-stand
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/finalize.py `
+  --render-dir outputs/vrm-s1-stand --geometry-dir local/geometry/sample1 --out outputs/results/vrm-s1-stand/1
 ```
 
-`--height 1.58`로 테스트 키를 지정할 수 있습니다. 생략 시 1.58m를 사용하며 최종 디자인 키로 확정한 값은 아닙니다. 로컬 Windows Chrome/Edge를 자동 탐색합니다. 다른 브라우저는 `--browser 실행파일경로` 또는 `BROWSER_BIN`으로 지정하고, 설치된 브라우저가 없으면 `npx playwright install chromium` 후 실행합니다. 서버는 로컬 루프백에만 잠시 열고 렌더 후 종료합니다.
+`--model`을 생략하면 `local/models/miku.vrm`을 씁니다. 키는 `examples/model_profile.json`의 `target_height_m`(1.58 m, 팀 확정)이고 `--height`로 바꿀 수 있습니다. 그 밖의 옵션: `--render-scale 2`(해상도 배율), `--supersample 2`(안티에일리어싱, 기본값), `--exposure 2`, `--key-share-min 0.3`, `--sky-samples 4`. 로컬 Windows Chrome/Edge를 자동 탐색합니다. 다른 브라우저는 `--browser 실행파일경로` 또는 `BROWSER_BIN`으로 지정하고, 설치된 브라우저가 없으면 `npx playwright install chromium` 후 실행합니다. 서버는 로컬 루프백에만 잠시 열고 렌더 후 종료합니다.
 
-입력 placement·spatial 형식과 의미는 Blender 경로와 같습니다. 출력은 `character.png`, `model_manifest.json`, `vrm_render_report.json`입니다. manifest의 공통 필드로 모델 SHA, 배율·크기, 발 접촉점을 전달하고 보고서에서 카메라 투영 오차·화면 잘림을 확인합니다. local bounds는 모델의 앞쪽이 +Z인 기준이며, 월드에 적용할 때 배치 방향과 엔진 축 변환을 반영합니다.
+입력 placement·spatial, 등록 포즈(`poses/*.json`), 모델 프로필은 Blender 경로와 같습니다. VRM이 Blender 모델과 같은 리그(뼈 이름·vertex group·단위)라서 `web/vrm_pose.js`가 `micut_ik/posing.py`를 그대로 옮겨 씁니다. 출력은 `character.png`, `model_manifest.json`, `placement_report.json`(Blender와 같은 필드)이고, `--photo`를 주면 `finalize.py`가 읽는 `pass_combined.npy`(선형·premultiplied RGBA), `pass_depth.npy`(카메라 평면 깊이 m), `pass_shadow.npy`(그림자 비율)가 추가됩니다. 실패하면 `error.json`에 `code`(`INVALID_PLACEMENT`, `SUPPORT_OUT_OF_RANGE`, `MODEL_MISMATCH` 등)를 남기고 종료 코드 1.
 
-VRM 버전·휴머노이드별 공통 로딩은 three-vrm을 사용하지만, 발 기준점은 Foot/Toes의 스킨 가중치가 있는 모델을 전제합니다. 타 모델의 발 가중치가 다르면 검증이 필요합니다.
+사진 해상도 그대로 렌더해도(예: 4284×5712, `--render-scale 5.58`) 메모리와 시간이 미쿠가 화면에서 차지하는 크기에만 비례합니다. 패스는 미쿠가 닿는 화소 상자(색·깊이)와 그림자 받는 바닥 사각형이 보이는 상자(그림자)만 렌더하고, 한 변 2048 화소 이하 타일로 나눠 그립니다. 그래서 슈퍼샘플 배율이 사진 크기 때문에 줄지 않습니다. 상자 위치는 `placement_report.json`의 `pass_regions`에 있고, `finalize.py`가 이 상자를 사진 위 제자리에 놓습니다(상자 밖은 사진 화소 그대로). 결과 파일은 16 MB씩 나눠 넘기고, 렌더 전체에 `--timeout`(기본 600초) 감시 타이머가 걸려 있어 멈추면 `error.json`(`RENDER_FAILED`, 마지막 단계 포함)을 남기고 종료 코드 1로 끝납니다. `--verbose 1`은 단계별 시간을 출력합니다.
+
+렌더 변경 확인 도구:
+
+```powershell
+# 등록 포즈 전부를 같은 장면에서 렌더·합성 → summary.json + sheet.jpg
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/pose_sheet.py --out outputs/pose_sheet
+# 두 렌더 폴더의 패스·final.jpg 화소 비교 (--regions full 로 렌더하면 상자 없이 전체 프레임)
+uv run --no-project --with numpy --with pillow --with OpenEXR python tools/compare_renders.py outputs/a outputs/b
+```
+
+조명: 사진에서 환경광을 만들고(Blender 경로와 같은 방식), 사진에 밝은 광원이 보이면 그 방향을, 아니면 위쪽 기본 방향을 키 라이트로 떼어 내 그림자를 만듭니다. 나머지 환경광은 하늘 방향 여러 개로 나눠 바닥의 부드러운 접지 그림자를 만듭니다(긴 변 512 화소 이하로 그려 키우므로 사진 크기와 관계없이 같은 모양). 그림자 맵은 포즈를 한 번 CPU로 스키닝한 정적 메시로 그립니다. 스프링본(머리카락·치마 물리)은 돌리지 않고 뼈 단위 정리만 합니다(지지면 위로, 트윈테일은 몸·팔·치마 밖으로). 몸끼리 겹친 정도는 manifest `penetration_body`에 남습니다. PM님 프리셋은 [micut-presets](https://github.com/MICUT-mikumikucamera/micut-presets)에서 `node tools/import_presets.mjs`로 가져오고, 시선만 실제 카메라 쪽으로 다시 맞춥니다. 등록되지 않은 새 조합은 `placement.json`의 `pose_ref`로 받고, 의자에 앉는 조합은 다리만 실제 좌판 높이에 맞춥니다(자세한 규칙은 `docs/POSE_IK.md`). 다른 VRM으로 바꾸면 프로필의 뼈 이름·vertex group을 다시 확인해야 합니다.
 
 ### Blender 직접 렌더
 
@@ -116,9 +133,15 @@ python tools/check_outputs.py outputs/stand-preview --expected-anchor 0 0 3.2 --
 python tools/check_outputs.py outputs/geometry-sample --expected-anchor 0.3 0 0.8
 ```
 
+## 포즈·IK
+
+등록 포즈는 `stand_default`, `stand_natural`, `sit_default`(착석, `pelvis_seat_contact`). 포즈 정의·착석 입력·manifest 추가 항목·테스트 세트 실행은 [포즈·IK 준비](docs/POSE_IK.md) 참고. VRM 경로(`web/`)는 아직 `stand_default`만 받는다.
+
 ## 인수인계
 
-- [민재님 인수인계](docs/HANDOFF_MINJAE.md)
+- [작업 규칙 (AGENTS.md)](AGENTS.md): 환경, 명령, 지켜야 할 것
+- [포즈·IK 사용법](docs/POSE_IK.md)
+- [민재님 인수인계 (10/30 원문)](docs/HANDOFF_MINJAE.md)
 - [성윤님 전달용 모델·좌표 기준](docs/HANDOFF_SUNGYOON.md)
 - [검증 결과와 모델 파일 문제](docs/VALIDATION.md)
 

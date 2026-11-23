@@ -1,0 +1,11 @@
+{
+  "schema": "micut.pose/0.1",
+  "pose_id": "stand_default",
+  "action": "stand",
+  "anchor_type": "feet_center_on_ground",
+  "description": "First-connection fixed stand: rest pose with only the upper arms lowered 75 degrees. Kept bit-compatible with the earlier manifests.",
+  "steps": [
+    {"op": "rotate", "bone": "left_upper_arm", "axis": "forward", "deg": -75},
+    {"op": "rotate", "bone": "right_upper_arm", "axis": "forward", "deg": 75}
+  ]
+}

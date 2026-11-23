@@ -1,0 +1,6 @@
+{
+  "note": "SYNTHETIC close front camera at 0.85 m for hands and skirt inspection.",
+  "image": {"width": 768, "height": 1024},
+  "camera": {"fx": 1700.0, "fy": 1700.0, "cx": 384.0, "cy": 512.0},
+  "ground_plane": {"cam_to_world": {"R": [[1, 0, 0], [0, -1, 0], [0, 0, 1]], "t": [0, 0.85, 0]}}
+}
