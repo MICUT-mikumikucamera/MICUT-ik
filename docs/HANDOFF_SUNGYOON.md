@@ -43,7 +43,7 @@
 | `anchor_type=pelvis_seat_contact`, Y = 좌판 높이 | 반영. 범위 밖이면 `SUPPORT_OUT_OF_RANGE` |
 | `support_candidate_id` | 반영 (manifest `support`에 기록만) |
 | `combo` (선택, 포즈 후보의 조합, 2026-11-23) | 등록 포즈(`pose_id` = 후보의 `combo_ref`)면 그 프리셋과 조합 해시가 같아야 함. 다르거나 등록 포즈가 아닌데 `pose_ref`가 없으면 `INVALID_PLACEMENT`. `pose_ref`가 있으면 기록만. Blender 경로는 거부 |
-| `preserve` (선택, 포즈 후보의 `preserve` 그대로, 2026-11-23) | 보정 뒤 그 부위가 그대로인지 manifest·`result.json`의 `checks.preserve`(`pass`/`fail`/`not_run`)로 남김. 머리 계열이면 시선 보정을 안 함 |
+| `preserve` (선택, 포즈 후보의 `preserve` 그대로, 2026-11-23) | 보정 뒤 그 부위가 그대로인지 manifest·`result.json`의 `checks.preserve`(`pass`/`fail`/`not_run`)로 남김. 머리 계열이면 시선 보정을, 다리 계열이면 앉기 다리 맞추기를 안 함(발이 뜰 수 있음) |
 | `selection` (선택, 문자열: `rule` / `jev` / `manual`) | 2026-11-16 추가. 배치 쪽 선택 방식. manifest와 `result.json`의 `placement.selection`으로 그대로 전달, 없으면 `"unknown"` |
 | 골반·발 접촉점 | manifest `contacts` |
 | 몸 충돌 프록시 | manifest `body_collision_proxy` (캡슐 14개, 머리카락·치마·소매 제외) |

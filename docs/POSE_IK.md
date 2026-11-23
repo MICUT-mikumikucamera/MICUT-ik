@@ -93,7 +93,8 @@ node tools/import_presets.mjs --check    # 쓰지 않고 비교만. 다르면 �
 - 부위 → 뼈: `fingers`(손가락), `hand`(손+손가락), `arm`·`coop`(팔 전체, `coop`은 양손 세트), `leg`·`legs`·`feet`(다리), `head`·`face`·`gaze`·`neck`(목·머리·눈).
 - 비교: 작업창 관절값을 얹은 직후와 모든 보정(시선, 머리카락, 앉기 다리, 장면 물체) 뒤, 가슴 기준 상대 변환이 0.5° 와 2 mm 안이면 `pass`, 넘으면 `fail`(`max_turn_deg`, `max_move_m` 기록). 부위를 모르거나 작업창 포즈가 아니면(우리 포즈 `stand_*`·`sit_default`) `not_run`과 이유.
 - 머리 계열 부위가 있으면 프리셋 시선 다시 맞추기를 하지 않는다(`look_at.mode = preset_as_authored`).
-- 지금 보정은 팔·손·손가락을 건드리지 않아 그 부위는 항상 `pass`다. 앉는 프리셋은 좌판 높이에 맞추느라 다리가 바뀌므로 `legs`를 지키라고 하면 `fail`이 난다(예: 0.45 m 의자 자세를 0.54 m 좌판에 앉히면 23°). `fail`이면 `result.json` 경고 `PRESERVE_FAILED`.
+- 다리 계열 부위(`leg`·`legs`·`feet`·`foot`)가 있으면 앉는 프리셋의 다리 맞추기(정강이 돌리기·허벅지 내리기·의자 다리 피하기)를 그쪽 다리(`side`, `both`면 양쪽)에 하지 않는다. 다리는 작업창 그대로라 좌판 높이가 다르면 발이 뜨거나 바닥에 닿지 않을 수 있고, `pose_report.legs.<side>.kept_for_preserve=true`, `feet_on_floor`, `sole_gap_m`으로 보고한다(2026-11-23 결정).
+- 지금 보정은 팔·손·손가락을 건드리지 않고, 다리는 지키라고 하면 맞추지 않으므로 이 부위들은 `pass`다(확인: 0.45 m 의자 자세를 0.54 m 좌판에 다리 preserve로 앉히면 다리 0.03°, 발 8.9 cm 뜸). `fail`이면 `result.json` 경고 `PRESERVE_FAILED`.
 - 전체 `status`: 하나라도 `fail`이면 `fail`, 아니면 `pass`가 하나라도 있으면 `pass`, 아니면 `not_run`.
 
 ## Blender에서 직접 포즈 잡기

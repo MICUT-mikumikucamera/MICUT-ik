@@ -541,9 +541,17 @@ export function penetration(rig, verts, support, tol) {
 // bones; their transforms relative to the chest are captured right after a workshop pose is applied and
 // compared once every clean-up (gaze, hair, seated legs, scene) has run. pass: every bone within
 // PRESERVE_DEG and PRESERVE_M; fail otherwise; not_run: unknown part, or not a workshop pose (no
-// authored reference). A head/face/gaze part also stops the preset gaze re-aim.
+// authored reference). A head/face/gaze part also stops the preset gaze re-aim, and a leg part stops the
+// seated-preset leg fitting for that side.
 const PRESERVE_DEG = 0.5, PRESERVE_M = 0.002;
 const HEAD_PARTS = new Set(["head", "face", "gaze", "neck"]);
+const LEG_PARTS = new Set(["leg", "legs", "feet", "foot"]);
+// Sides whose legs placement.preserve keeps: the seated fitting leaves them as authored.
+function preservedLegSides(items) {
+  const out = new Set();
+  for (const x of items || []) if (LEG_PARTS.has(x.part)) for (const s of x.side === "both" ? SIDES : [x.side]) out.add(s);
+  return out;
+}
 const FINGER_NAMES = ["thumb", "index", "middle", "ring", "little"];
 function partKeys(rig, side, part) {
   const sides = side === "both" ? SIDES : [side];
@@ -1046,7 +1054,7 @@ function applyBaked(rig, pose, scale, supportHeightM, cameraSrcOf, sceneOf = nul
   const seated = pose.action === "sit";
   let anchorSrc, seat, support, planes;
   if (seated) {
-    seat = seatBakedLegs(rig, pose, scale, supportHeightM, sceneOf);
+    seat = seatBakedLegs(rig, pose, scale, supportHeightM, sceneOf, preservedLegSides(preserve));
     anchorSrc = seat.contact;
     support = seatSupport(rig, anchorSrc, seat.floor, rig.height(anchorSrc), scale);
     planes = { floor_src: seat.floor, seat_src: rig.height(anchorSrc) };
@@ -1117,7 +1125,9 @@ function seatSupport(rig, centre, floor, seatH, scale) {
 //     preset_max_thigh_drop_deg (15) and never deeper into the seat plane than authored (or 1.5 cm);
 //  3. what is left hangs: feet_on_floor=false.
 // Dangling-leg bases (source.seat.feet_on_floor false, e.g. a high seat) are only lifted out of the floor.
-function seatBakedLegs(rig, pose, scale, seatHeightM, sceneOf = null) {
+// Legs named in placement.preserve (keep: sides) are left exactly as authored, feet may hang or touch the
+// floor as they fall (reported, kept_for_preserve).
+function seatBakedLegs(rig, pose, scale, seatHeightM, sceneOf = null, keep = new Set()) {
   const feetOnFloor = pose.source?.seat?.feet_on_floor ?? true;
   const maxDrop = rad(rig.profile.preset_max_thigh_drop_deg ?? 15);
   const tol = 0.002 / scale;
@@ -1161,6 +1171,10 @@ function seatBakedLegs(rig, pose, scale, seatHeightM, sceneOf = null) {
     const need = start - floor; // + : sole above the real floor, - : inside it
     const report = { reached: true, moved_m: 0, shin_turn_deg: 0, thigh_drop_deg: 0 };
     legs[side] = report;
+    if (keep.has(side)) {
+      report.kept_for_preserve = true;
+      continue;
+    }
     if ((feetOnFloor ? Math.abs(need) : -need) <= tol) continue;
     const upper = rig.pb(`${side}_upper_leg`), lower = rig.pb(`${side}_lower_leg`);
     const q0 = [upper.quaternion.clone(), lower.quaternion.clone()];
@@ -1253,7 +1267,7 @@ function seatBakedLegs(rig, pose, scale, seatHeightM, sceneOf = null) {
       }, 0);
       const now = over();
       legs[side].scene_overlap_before_m = now * scale;
-      if (now <= tol) continue;
+      if (now <= tol || keep.has(side)) continue;
       const lower = rig.pb(`${side}_lower_leg`);
       const q0 = lower.quaternion.clone();
       const footQuat = rig.worldQuat(`${side}_foot`);
